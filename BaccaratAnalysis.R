@@ -5,7 +5,7 @@
 # Description ............ This Baccarat Game Simulator, generates result of an actual casino floor game
 # ........................ showing cards drawn to each side respective to rules of the game. At the end
 # ........................ of the simulation, it will generate data analysis giving the central tendency
-# ........................ of the game, using the playgame() function.
+# ........................ of the game, using the simulplay() function.
 # ........................................................
 
 library(plyr)
