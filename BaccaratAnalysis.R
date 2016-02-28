@@ -5,7 +5,7 @@
 # Description ............ This Baccarat Game Simulator, generates result of an actual casino floor game
 # ........................ showing cards drawn to each side respective to rules of the game. At the end
 # ........................ of the simulation, it will generate data analysis giving the central tendency
-# ........................ of the game, using the playgame() function.
+# ........................ of the game, using the simulplay() function.
 # ........................................................
 
 library(plyr)
@@ -446,3 +446,22 @@ simulplay <- function(n = 20) {
   cat("Total Deals: ", deals, "\n")
   return(list(board=dresult,tc=drgncount,mode=mcount,cards=mcardsinshoe))
 }
+
+# Run the function below to start simulation
+# The default simulation is 20 shoes/games
+#
+newgame <- simulplay()
+# To extract values from the variable and show the result use
+#
+gresult <- sapply(newgame$board,summary)
+# To show true count (removal of 9's and 8's in the shoe) tendencies on dragon.
+# plot(table(newgame$tc))
+#
+# View the top bucket of cards
+cstorage <- as.character(head(newgame$cards[1,]))
+# Maximum Dragon outcome in a shoe
+cat("Max Dragon Count in a Shoe: ", max(newgame$board$Dragon))
+# Location of highest dragon count
+drgnindex <- which(newgame$board$Dragon==max(newgame$board$Dragon,na.rm = TRUE))
+
+
