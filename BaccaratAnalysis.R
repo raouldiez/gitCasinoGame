@@ -421,11 +421,6 @@ simulplay <- function(n = 20) {
       drgncount <- c(drgncount,as.numeric(liveshoe[ndragon,3]))
     }
     
-    # mcountv <- table(drgncount)
-    
-    # Obtain the mode of Dragon
-    # mcount <- as.numeric(names(mcountv)[mcountv==max(mcountv)])
-    
     deals <- deals + length(liveshoe[,1])
     sresult <- liveshoe[,1]
     noties <- sresult[sresult != "/"]
@@ -434,6 +429,12 @@ simulplay <- function(n = 20) {
     prun <- max(r_nties$lengths[r_nties$values=="P"])
     #indexc <- which(liveshoe[,1]=="BD")
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
+  # Save to csv file and remove cards object from the list
+  # write.table(resultMatrix, file = "data-appended.csv", sep = ",", 
+  #          col.names = NA)
+  # FF <- as.matrix(t(features))
+  # write.table(FF, file = "data-appended.csv", sep = ",", 
+  #          col.names = FALSE, append=TRUE)
   }
   mcountv <- table(drgncount)
   mcount <- as.numeric(names(mcountv)[mcountv==max(mcountv)])
@@ -444,6 +445,8 @@ simulplay <- function(n = 20) {
   colnames(mresult)<- cnames
   dresult <- data.frame(mresult)
   cat("Total Deals: ", deals, "\n")
+  
+  
   return(list(board=dresult,tc=drgncount,mode=mcount,cards=mcardsinshoe))
 }
 
