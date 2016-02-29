@@ -446,7 +446,6 @@ simulplay <- function(n = 20) {
   cat("Total Deals: ", deals, "\n")
   return(list(board=dresult,tc=drgncount,mode=mcount,cards=mcardsinshoe))
 }
-<<<<<<< HEAD
 
 # Run the function below to start simulation
 # The default simulation is 20 shoes/games
@@ -465,6 +464,3 @@ cat("Max Dragon Count in a Shoe: ", max(newgame$board$Dragon))
 # Location of highest dragon count
 drgnindex <- which(newgame$board$Dragon==max(newgame$board$Dragon,na.rm = TRUE))
 
-
-=======
->>>>>>> 5c5beb5bfaac4dc4db13ae4801715010a85bde2b
