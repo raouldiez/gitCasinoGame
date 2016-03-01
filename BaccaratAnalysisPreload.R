@@ -472,23 +472,30 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
 # Run the function below to start simulation
 # The default simulation is 20 shoes/games
 #
-system.time(newgame <- simulplay())
+#system.time(newgame <- simulplay())
 # To extract values from the variable and show the result use
 #
-gresult <- sapply(newgame$board,summary)
+#gresult <- sapply(newgame$board,summary)
 # To show true count (removal of 9's and 8's in the shoe) tendencies on dragon.
 # plot(table(newgame$tc))
 #
 # View the top bucket of cards
-cstorage <- as.character(head(newgame$cards[1,]))
+#cstorage <- as.character(head(newgame$cards[1,]))
 # Maximum Dragon outcome in a shoe
-cat("Max Dragon Count in a Shoe: ", max(newgame$board$Dragon))
+#cat("Max Dragon Count in a Shoe: ", max(newgame$board$Dragon))
 # Location of highest dragon count
-drgnindex <- which(newgame$board$Dragon==max(newgame$board$Dragon,na.rm = TRUE))
+#drgnindex <- which(newgame$board$Dragon==max(newgame$board$Dragon,na.rm = TRUE))
 
 # Load file
 # cbkt <- as.matrix(read.table("bucketa.csv",sep = ","))
 # mbkt <- matrix(cbkt,416,numofsimulation, byrow = FALSE)
 # Location of game
 # cbkt[,drgnindex]
+
+# Uncomment below to start preloading shuffled decks to simulate 2,000,000 runs
+# cardsbkt.2m <- cylinder(2000000)
+# then run simulplay() with cardsbkt.2m as argument
+# baccres.2m <- simulplay(cardsbkt.2m,2000000)
+#
+
 
