@@ -1,14 +1,14 @@
 # ........................................................
 # Title .................. Baccarat Simulator
 # Author ................. Raoul R. Diez
-# Date ................... February 29, 2016
+# Date ................... February 8, 2016
 # Description ............ This Baccarat Game Simulator, generates result of an actual casino floor game
 # ........................ showing cards drawn to each side respective to rules of the game. At the end
 # ........................ of the simulation, it will generate data analysis giving the central tendency
 # ........................ of the game, using the simulplay() function.
 # ........................................................
 
-library(plyr)
+#library(plyr)
 suit <- c("H", "C", "D", "S")
 bottomsuit <- c("H", "C")
 topsuit <- c("D", "S")
@@ -138,9 +138,9 @@ NewBaccShoe <- function(d = 8) {
 # NewBaccShoe() function.
 
 cylinder <- function(n=1000000){
-  preshuffle <- matrix("* *", 416,n)
+  preshuffle <- matrix("* *", n,416)
   for (i in 1:n){
-    preshuffle[,i]<-NewBaccShoe()
+    preshuffle[i,]<-NewBaccShoe()
     print(i)
   }
   return(preshuffle)
@@ -173,13 +173,13 @@ StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
   d <- length(s)/52
   v <- dealcard(s)
   tcards <- s[1:(v+1)]
- 
-   for (i in 1:(v+1)){
-     if (dealcard(tcards[i]) %in% c(8,9)) {
+  
+  for (i in 1:(v+1)){
+    if (dealcard(tcards[i]) %in% c(8,9)) {
       rcount <- (rcount + 1)
       tcount <- rcount/d
-     }
-   }
+    }
+  }
   
   if (dv){
     cat(sprintf("Burry Card is %s \n", s[1]))
@@ -346,8 +346,8 @@ StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
     #invisible(readline("...."))
   }
   if (dv){
-  cat("Total Deals: ", length(board) / 3,"\n")
-  print(table(matrix(board,(length(board) / 3),3, byrow = TRUE)[,1]))
+    cat("Total Deals: ", length(board) / 3,"\n")
+    print(table(matrix(board,(length(board) / 3),3, byrow = TRUE)[,1]))
   }
   mboard <- matrix(board,(length(board) / 3),3, byrow = TRUE)
   return (list(dboard=mboard, cards=cnshoe))
@@ -411,7 +411,7 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     
     # Assign container for every cards dealt per shoe
     # cardsbkt <- matrix(n:416)
-    ls <- StartLiveGame(s[,i],dv=0)
+    ls <- StartLiveGame(s[i,],dv=0)
     
     # Assign the returned list[1] value equals the game result
     #liveshoe <- ldply(ls[1],data.frame)
@@ -443,16 +443,16 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     brun <- max(r_nties$lengths[r_nties$values=="B"])
     prun <- max(r_nties$lengths[r_nties$values=="P"])
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
-  # Save to csv file and remove cards object from the list
-  # write.table(resultMatrix, file = "data-appended.csv", sep = ",", 
-  #          col.names = NA)
-  # FF <- as.matrix(t(features))
-  # write.table(FF, file = "data-appended.csv", sep = ",", 
-  #          col.names = FALSE, append=TRUE)
+    # Save to csv file and remove cards object from the list
+    # write.table(resultMatrix, file = "data-appended.csv", sep = ",", 
+    #          col.names = NA)
+    # FF <- as.matrix(t(features))
+    # write.table(FF, file = "data-appended.csv", sep = ",", 
+    #          col.names = FALSE, append=TRUE)
     
-  # write.table(newgame$cards[1,], file = "bucket2.csv", sep = ",", col.names = FALSE, row.names = FALSE)
-  # cbkt <- as.matrix(read.table("bucket2.csv",sep = ","))
-  # mbkt3 <- matrix(cbkt,416,2, byrow = FALSE)
+    # write.table(newgame$cards[1,], file = "bucket2.csv", sep = ",", col.names = FALSE, row.names = FALSE)
+    # cbkt <- as.matrix(read.table("bucket2.csv",sep = ","))
+    # mbkt3 <- matrix(cbkt,416,2, byrow = FALSE)
   }
   mcountv <- table(drgncount)
   mcount <- as.numeric(names(mcountv)[mcountv==max(mcountv)])
@@ -491,11 +491,9 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
 # mbkt <- matrix(cbkt,416,numofsimulation, byrow = FALSE)
 # Location of game
 # cbkt[,drgnindex]
-
-# Uncomment below to start preloading shuffled decks to simulate 2,000,000 runs
-# cardsbkt.2m <- cylinder(2000000)
-# then run simulplay() with cardsbkt.2m as argument
-# baccres.2m <- simulplay(cardsbkt.2m,2000000)
-#
-
+#drgnmaxbin <- matrix(cardsbin[drgnindex,],3,416)
+#write.table(drgnmaxbin, file = "dragon11set.csv", sep = ",", col.names = FALSE, row.names = FALSE)
+#df<-read.table("dragon11set.csv",sep = ",", stringsAsFactors = FALSE)
+#oldset <- as.character(dragon11set[1,])
+# StartLiveGame(oldset)
 
