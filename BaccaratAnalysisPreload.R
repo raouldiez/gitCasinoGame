@@ -408,28 +408,16 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
   mcardsinshoe <- NULL
   
   for (i in 1:n) {
-    
-    # Assign container for every cards dealt per shoe
-    # cardsbkt <- matrix(n:416)
-    ls <- StartLiveGame(s[i,],dv=0)
-    
-    # Assign the returned list[1] value equals the game result
-    #liveshoe <- ldply(ls[1],data.frame)
+    # Check s argument if preloaded
+    if (class(s)=="matrix"){
+      ls <- StartLiveGame(s[i,],dv=0)
+    }else{
+      ls <- StartLiveGame(dv=0)
+    }
+
     liveshoe <- ls$dboard
-    
-    
-    # Assign the second list as the undealt cards in the shoe
-    # cardsinshoe <- c(cardsinshoe, unlist(ls[2]))
-    #cardsinshoe <- c(cardsinshoe,ls$cards)
     invisible(print(i))
-    # Saving to file implementation
-    # if (i==1){
-    #   # Create new file on first run
-    #   write.table(ls$cards, file = "bucketa.csv", sep = ",", col.names = FALSE, row.names = FALSE)
-    # }else{
-    #   write.table(ls$cards, file = "bucketa.csv", sep = ",", col.names = FALSE, row.names = FALSE, append = TRUE)
-    # }
-    # Obtain the mode value of true count
+    
     bdcount <- which(liveshoe[,1]=="BD")
     if (identical(bdcount,integer(0))==FALSE){
       ndragon <- which(liveshoe[,1]=="BD")
@@ -443,29 +431,14 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     brun <- max(r_nties$lengths[r_nties$values=="B"])
     prun <- max(r_nties$lengths[r_nties$values=="P"])
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
-    # Save to csv file and remove cards object from the list
-    # write.table(resultMatrix, file = "data-appended.csv", sep = ",", 
-    #          col.names = NA)
-    # FF <- as.matrix(t(features))
-    # write.table(FF, file = "data-appended.csv", sep = ",", 
-    #          col.names = FALSE, append=TRUE)
-    
-    # write.table(newgame$cards[1,], file = "bucket2.csv", sep = ",", col.names = FALSE, row.names = FALSE)
-    # cbkt <- as.matrix(read.table("bucket2.csv",sep = ","))
-    # mbkt3 <- matrix(cbkt,416,2, byrow = FALSE)
   }
   mcountv <- table(drgncount)
   mcount <- as.numeric(names(mcountv)[mcountv==max(mcountv)])
-  #mcardsinshoe <- matrix(cardsinshoe,n,416,byrow = TRUE)
-  
   cnames <- c("Dragon","Panda","Tie","Player","Banker", "BRun", "PRun")
   mresult <- matrix(dcount,n,7,1)
   colnames(mresult)<- cnames
   dresult <- data.frame(mresult)
   cat("Total Deals: ", deals, "\n")
-  
-  
-  #return(list(board=dresult,tc=drgncount,mode=mcount,cards=mcardsinshoe))
   return(list(board=dresult,tc=drgncount,mode=mcount))
 }
 
