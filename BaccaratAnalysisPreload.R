@@ -464,7 +464,7 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
 # mbkt <- matrix(cbkt,416,numofsimulation, byrow = FALSE)
 # Location of game
 # cbkt[,drgnindex]
-#drgnmaxbin <- matrix(cardsbin[drgnindex,],3,416)
+#drgnmaxbin <- cardsbin[drgnindex,]
 #write.table(drgnmaxbin, file = "dragon11set.csv", sep = ",", col.names = FALSE, row.names = FALSE)
 #df<-read.table("dragon11set.csv",sep = ",", stringsAsFactors = FALSE)
 #oldset <- as.character(dragon11set[1,])
