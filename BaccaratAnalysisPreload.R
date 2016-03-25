@@ -139,14 +139,15 @@ NewBaccShoe <- function(d = 8) {
 
 cylinder <- function(n=1000000){
   preshuffle <- matrix("* *", n,416)
+  pb = txtProgressBar(min = 0, max = n, style = 3)
   for (i in 1:n){
     preshuffle[i,]<-NewBaccShoe()
-    print(i)
+    setTxtProgressBar(pb, i)
   }
   return(preshuffle)
 }
 
-StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
+StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE, w = 25) {
   plyr <- NULL
   bnkr <- NULL
   mboard <- NULL
@@ -165,7 +166,12 @@ StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
   tcount <- 0
   rcount <-0
   cnshoe <- NULL
-  v<-0
+  v <- 0
+  win <-0
+  twin <- 0
+  loss <- 0
+  wcount <- 0
+  wager <- 0
   
   #Save the sequence of shuffled decks
   cnshoe <- s
@@ -190,8 +196,8 @@ StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
     cat(sprintf("The cards remaining are: %d \n",length(s)))
   }
   
-  while (length(s) > 6) {
-    if (length(s) < 11) {
+  while (length(s) > 7) {
+    if (length(s) < 12) {
       if (dv) {
         
         #cat("\n")
@@ -343,20 +349,48 @@ StartLiveGame <- function(s=NewBaccShoe(), dv = TRUE) {
         board <- c(board,"/", 0, tcount)
       }
     }
+    #print(board)
     #invisible(readline("...."))
+    
+    if(board[length(board)-2] != "/"){
+      if (board[length(board)-2] == "B"){
+        if (wcount < 5){
+          if (wcount==0){
+            wager<-w
+          }
+          wcount <- wcount +1
+          win <- wager
+          twin <- twin + win
+          wager <- wager * 2
+        }
+      }
+      if (substr(board[length(board)-2],1,1) == "P"){
+        if (wcount==0){
+          wager <- w
+        }
+        wcount <- 0
+        twin <- twin -wager
+        wager <- w
+      }
+      # print(substr(board[length(board)-2],1,1))
+     # print (wager)
+      # print(twin)
+       #invisible(readline("...."))
+    }
+    
   }
+  
   if (dv){
     cat("Total Deals: ", length(board) / 3,"\n")
     print(table(matrix(board,(length(board) / 3),3, byrow = TRUE)[,1]))
   }
   mboard <- matrix(board,(length(board) / 3),3, byrow = TRUE)
-  return (list(dboard=mboard, cards=cnshoe))
+  return (list(dboard=mboard, cards=cnshoe, winnings=twin))
 }
 
 #verify number of the same cards      
 
-VerifyCard <-
-  function(NewShoe, CardtoSearch = "1 S", n = length(NewShoe)) {
+VerifyCard <- function(NewShoe, CardtoSearch = "1 S", n = length(NewShoe)) {
     CountCards <- 0
     for (i in 1:n) {
       if (NewShoe[i] == CardtoSearch) {
@@ -388,6 +422,7 @@ newshoe <- function(S,n = 1) {
 # To simulate continous games. Default value is 20 shoes.
 
 simulplay <- function(s=NewBaccShoe(), n = 20) {
+  
   deals <- 0
   bdcount <-0
   dcount <- NULL
@@ -406,6 +441,10 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
   ls <- NULL
   cardsinshoe <-NULL
   mcardsinshoe <- NULL
+  rtrend <- NULL
+  
+  #Shows the progress bar during simulation
+  pb = txtProgressBar(min = 0, max = n, style = 3)
   
   for (i in 1:n) {
     # Check s argument if preloaded
@@ -416,14 +455,15 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     }
 
     liveshoe <- ls$dboard
-    invisible(print(i))
+    #invisible(print(i))
     
     bdcount <- which(liveshoe[,1]=="BD")
     if (identical(bdcount,integer(0))==FALSE){
       ndragon <- which(liveshoe[,1]=="BD")
       drgncount <- c(drgncount,as.numeric(liveshoe[ndragon,3]))
     }
-    
+    #Save pattern
+    rtrend <- c(rtrend,liveshoe[,1])
     deals <- deals + length(liveshoe[,1])
     sresult <- liveshoe[,1]
     noties <- sresult[sresult != "/"]
@@ -431,15 +471,16 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     brun <- max(r_nties$lengths[r_nties$values=="B"])
     prun <- max(r_nties$lengths[r_nties$values=="P"])
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
-  }
+    setTxtProgressBar(pb, i)
+    }
   mcountv <- table(drgncount)
   mcount <- as.numeric(names(mcountv)[mcountv==max(mcountv)])
   cnames <- c("Dragon","Panda","Tie","Player","Banker", "BRun", "PRun")
   mresult <- matrix(dcount,n,7,1)
   colnames(mresult)<- cnames
   dresult <- data.frame(mresult)
-  cat("Total Deals: ", deals, "\n")
-  return(list(board=dresult,tc=drgncount,mode=mcount))
+  cat("\nTotal Deals: ", deals, "\n")
+  return(list(board=dresult,tc=drgncount,mode=mcount, trend=rtrend))
 }
 
 # Run the function below to start simulation
