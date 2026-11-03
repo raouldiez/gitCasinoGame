@@ -6,10 +6,26 @@ betting systems and side-bet card counting.
 
 Both interfaces have the same three tabs:
 
-* **Play**: deal a shoe hand by hand. Bet on Player, Banker, Tie, Dragon 7 and Panda 8,
-  with a bead plate, Big Road and an optional Dragon count.
+* **Play**: each shoe starts by showing the burn: the first card face up, then that many
+  cards face down (10 for 10/J/Q/K). Deal hand by hand and bet on Player, Banker, Tie,
+  Dragon 7 and Panda 8, with a bead plate, Big Road and an optional Dragon count. Turn on
+  **Auto-bet** to let a betting system place the bets, and **Autoplay** to run it for N hands.
 * **Simulate**: set shoes, decks, cut card, game and seed, then compare simulated vs exact
   house edge, betting systems, and Dragon 7 return by true count.
+
+### Betting systems
+
+Every system is a choice of **side** (Banker, Player, opposite of the last result, or same as the
+last result) combined with a **bet-sizing rule**: Flat, Martingale, Paroli, Fibonacci, D'Alembert,
+1-3-2-6, Labouchère, Oscar's Grind, the 2016 chop progression, or the Dragon count. Settings:
+base bet, table maximum, maximum progression steps, and a stop-loss and take-profit per shoe.
+Ties (and, in EZ Baccarat, a Banker bet on a Dragon 7) are pushes and leave the progression unchanged.
+
+```r
+cfg <- system_config("Martingale", side = "B", base = 10, table_max = 1000, max_steps = 6)
+run <- play_strategy(h, cfg, game = "standard")
+compare_strategies(h, default_systems(side = "opposite", stop_loss = 200))
+```
 * **Count trainer**: practise the Dragon 7 count with timed auto-deal, periodic quizzes and
   an optional practice mode that shows each card's tag.
 
@@ -86,3 +102,23 @@ Run the tests with `Rscript tests.R`.
 simulator, kept for reference. They were patched to run on R ≥ 4.2 (the `class(s) == "matrix"` check),
 so they no longer crash on shoes with no Banker or Player run or with a single run, and naturals now
 record their real point spread.
+
+## Credits
+
+* **Raoul R. Diez**: author. Wrote the original simulator in 2016 (`BaccaratAnalysis*.R`),
+  including the idea of tracking 8s and 9s for the Dragon 7 bet, and directed the 2026 v2 rewrite.
+* **Eliot Jacobson, Ph.D.**: the Dragon 7 card count used throughout (tags 4–7 = −1, 8–9 = +2;
+  bet at a true count of +4 or more), from his analysis *Card Counting the Dragon Side Bet in
+  EZ Baccarat* (2011), published on [Wizard of Odds](https://wizardofodds.com/games/baccarat/).
+  More of his work is at [apheat.net](https://www.apheat.net/).
+* **Michael Shackleford (Wizard of Odds)**: published 8-deck baccarat probabilities and house
+  edges, which `tests.R` uses to check `exact_odds()` and the simulator.
+* **Claude (Anthropic)**: helped write v2: the engine, tests, Shiny app and browser version.
+  Those commits are marked `Co-Authored-By: Claude`.
+* **Tools**: [R](https://www.r-project.org/), [Shiny](https://shiny.posit.co/) and
+  [bslib](https://rstudio.github.io/bslib/). The browser version uses the Cormorant Garamond and IBM Plex
+  fonts from [Google Fonts](https://fonts.google.com/) (SIL Open Font License).
+
+The betting systems (Martingale, Paroli, Fibonacci, D'Alembert, 1-3-2-6, Labouchère, Oscar's Grind)
+are traditional systems in the public domain. They are included to show that bet sizing cannot
+overcome the house edge, not as recommendations.

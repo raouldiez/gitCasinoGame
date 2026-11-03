@@ -31,6 +31,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* components below set display; hidden must still win */
 html, body { margin: 0; background: var(--rail); color: var(--ink); font: 15px/1.5 var(--body); }
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
@@ -79,6 +80,26 @@ section[hidden] { display: none !important; }
 @keyframes dealin { from { opacity: 0; translate: 0 -18px; } to { opacity: 1; translate: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .deal-in { animation: none; } }
 .empty { color: rgba(245,239,225,.55); font-style: italic; }
+.card.back { background: repeating-linear-gradient(45deg, #7d1d1a 0 5px, #9c2b25 5px 10px); border: 3px solid var(--ivory); }
+/* Start of shoe: first card face up, then that many burned face down */
+.burn { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.burn-title { font: 600 1.35rem/1 var(--display); letter-spacing: .2em; color: var(--brass); }
+.burn-row { display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+.burn-row > div { display: grid; gap: 10px; justify-items: center; }
+.backs { display: flex; } .backs .card + .card { margin-left: -52px; }
+.burn-cap { font-size: .85rem; color: var(--muted); }
+.burn-note { font: 500 .95rem/1.5 var(--body); max-width: 60ch; }
+.felt.at-burn .cards, .felt.at-burn .total { display: none; }
+
+.auto { display: grid; gap: 12px; }
+.auto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; }
+.field { display: grid; gap: 4px; font-size: .82rem; color: var(--muted); }
+.field input, .field select { background: var(--rail); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: var(--ink); min-width: 0; }
+.auto-status { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: .92rem; }
+.auto[data-on="false"] .auto-body { display: none; }
+.spots.locked .spot { cursor: default; }
+.syslist { display: grid; gap: 4px; }
+.form .syslist label { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: .9rem; }
 .banner { text-align: center; min-height: 2.6rem; font: 600 1.6rem/1.3 var(--display); color: var(--ivory); }
 .banner .sp { color: var(--brass); margin-left: .4em; letter-spacing: .08em; }
 .banner small { display: block; font: 500 .95rem var(--body); color: var(--ink); }
@@ -155,6 +176,10 @@ canvas { width: 100%; display: block; }
 .fb { margin-top: 10px; display: grid; gap: 4px; font-weight: 500; }
 .legend-tags { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: .9rem; }
 
+.credits { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; border-top: 1px solid var(--line);
+           color: var(--muted); font-size: .8rem; text-align: center; }
+.credits p { margin: 6px auto; max-width: 90ch; }
+.credits a { color: var(--brass); }
 @media (max-width: 820px) {
   .two, .simgrid { grid-template-columns: 1fr; }
   .spots { grid-template-columns: repeat(3, 1fr); }
@@ -224,7 +249,33 @@ canvas { width: 100%; display: block; }
     <button class="btn" id="newShoe">New shoe</button>
     <button class="btn" id="resetBank">Reset bankroll</button>
   </div>
-  <p class="note" style="margin-top:-6px">Click a betting spot to add the selected chip. Bets stay in place for the next hand until you clear them.</p>
+  <p class="note" style="margin-top:-6px" id="pHint">Click a betting spot to add the selected chip. Bets stay in place for the next hand until you clear them. Space bar deals.</p>
+
+  <div class="panel auto" id="auto" data-on="false">
+    <label class="tog"><input type="checkbox" id="aOn"> <b>Auto-bet with a system</b></label>
+    <div class="auto-body auto">
+      <div class="auto-grid">
+        <label class="field">System <select id="aSystem"></select></label>
+        <label class="field">Bet on <select id="aSide">
+          <option value="B">Banker</option><option value="P">Player</option>
+          <option value="opposite">Opposite of last result</option><option value="same">Same as last result</option></select></label>
+        <label class="field">Base bet <input type="number" id="aBase" value="10" min="1" step="5"></label>
+        <label class="field">Table max <input type="number" id="aMax" value="1000" min="1" step="100"></label>
+        <label class="field">Max progression steps <input type="number" id="aSteps" value="6" min="1" max="15"></label>
+        <label class="field">Stop-loss per shoe (0 = off) <input type="number" id="aSL" value="0" min="0" step="50"></label>
+        <label class="field">Take-profit per shoe (0 = off) <input type="number" id="aTP" value="0" min="0" step="50"></label>
+        <label class="field" id="aThrWrap" hidden>Dragon bet at true count ≥ <input type="number" id="aThr" value="4" step="0.5"></label>
+      </div>
+      <p class="note" id="aHelp" style="margin:0"></p>
+      <div class="controls">
+        <label class="field" style="width:120px">Hands to autoplay <input type="number" id="aHands" value="20" min="1" max="500"></label>
+        <label class="field" style="width:140px">Speed <select id="aSpeed"><option value="1500">Slow</option><option value="700" selected>Normal</option><option value="250">Fast</option><option value="60">Turbo</option></select></label>
+        <button class="btn primary" id="aGo">Autoplay</button>
+        <button class="btn" id="aStop">Stop</button>
+      </div>
+      <div class="auto-status" id="aStatus"></div>
+    </div>
+  </div>
 
   <div class="countbar" id="pCount" hidden></div>
 
@@ -244,8 +295,18 @@ canvas { width: 100%; display: block; }
       <label>Decks <span class="row"><input type="range" id="sDecks" min="1" max="8" value="8"><span class="num" id="sDecksV">8</span></span></label>
       <label>Cards behind the cut card <span class="row"><input type="range" id="sCut" min="6" max="60" value="14"><span class="num" id="sCutV">14</span></span></label>
       <label>Game <select id="sGame"><option value="standard">Standard (5% commission)</option><option value="ez">EZ Baccarat</option></select></label>
-      <label>Dragon bet when true count is at least <span class="row"><input type="range" id="sThr" min="0" max="10" step="0.5" value="4"><span class="num" id="sThrV">4</span></span></label>
       <label>Random seed (blank for random) <input type="number" id="sSeed" placeholder="e.g. 42"></label>
+      <h3 style="margin:6px 0 0">Betting systems</h3>
+      <div class="syslist" id="sSystems"></div>
+      <label>Bet on <select id="sSide"><option value="B">Banker</option><option value="P">Player</option>
+        <option value="opposite">Opposite of last result</option><option value="same">Same as last result</option></select></label>
+      <label>Base bet <input type="number" id="sBase" value="10" min="1" step="5"></label>
+      <label>Table max <input type="number" id="sMax" value="1000" min="1" step="100"></label>
+      <label>Max progression steps <input type="number" id="sSteps" value="6" min="1" max="15"></label>
+      <label>Stop-loss per shoe (0 = off) <input type="number" id="sSL" value="0" min="0" step="50"></label>
+      <label>Take-profit per shoe (0 = off) <input type="number" id="sTP" value="0" min="0" step="50"></label>
+      <label>Dragon bet when true count is at least <span class="row"><input type="range" id="sThr" min="0" max="10" step="0.5" value="4"><span class="num" id="sThrV">4</span></span></label>
+      <p class="note" style="margin:0">Chop progression always bets against the last result; Dragon count always bets the Dragon 7.</p>
       <button class="btn primary" id="sRun">Run simulation</button>
       <p class="note" id="sStatus"></p>
     </div>
@@ -253,7 +314,7 @@ canvas { width: 100%; display: block; }
       <div class="strip" id="sTiles"></div>
       <div class="panel"><h3>House edge: simulated vs exact</h3><div class="tbl"><table id="sEdge"></table></div>
         <p class="note">Exact values come from enumerating every possible deal off the top of a fresh shoe. Simulated values should land within the ±95% range.</p></div>
-      <div class="panel"><h3>Betting systems vs the house</h3><canvas id="cStrat" height="300"></canvas><div class="legend" id="lStrat"></div>
+      <div class="panel"><h3>Betting systems vs the house (net result in money)</h3><canvas id="cStrat" height="300"></canvas><div class="legend" id="lStrat"></div>
         <div class="tbl" style="margin-top:10px"><table id="sStrat"></table></div></div>
       <div class="two">
         <div class="panel"><h3>Dragon 7 return by true count</h3><canvas id="cDragon" height="260"></canvas>
@@ -306,6 +367,14 @@ canvas { width: 100%; display: block; }
   </div>
 </section>
 </main>
+<footer class="credits">
+  <p>Baccarat Table by Raoul R. Diez: simulator first written in R in 2016, rebuilt in 2026 with help from Claude (Anthropic).</p>
+  <p>Dragon 7 count by Eliot Jacobson, Ph.D., from <i>Card Counting the Dragon Side Bet in EZ Baccarat</i>,
+    published on <a href="https://wizardofodds.com/games/baccarat/">Wizard of Odds</a>.
+    Exact odds checked against figures published by Michael Shackleford (Wizard of Odds).
+    Betting systems are traditional and shown for comparison, not as advice.</p>
+  <p><a href="https://github.com/raouldiez/gitCasinoGame">Source code on GitHub</a></p>
+</footer>
 
 <script>
 // Baccarat engine — JavaScript port of baccarat.R (same rules, same Dragon count)
@@ -426,32 +495,103 @@ function exactOdds(decks = 8) {
     "Tie": 1 - 9 * T, "Dragon 7": 1 - 41 * D7, "Panda 8": 1 - 26 * P8 } };
 }
 
-// Strategies: (state) => {bet: "P"|"B"|"T"|"D"|null, units}
-const STRATEGIES = {
-  "Flat Banker":            s => ({ bet: "B", units: 1 }),
-  "Flat Player":            s => ({ bet: "P", units: 1 }),
-  "Chop progression (2016)": s => (s.last === null || s.streak > 3) ? { bet: null } :
-                                   { bet: s.last === "B" ? "P" : "B", units: s.streak },
-  "Follow the streak":      s => ({ bet: s.last ?? "B", units: 1 }),
-  "Martingale Banker":      s => ({ bet: "B", units: 2 ** (s.losses % 6) }),
-  "Dragon count":           (s, thr) => s.tc >= thr ? { bet: "D", units: 1 } : { bet: null },
+// ---- Betting systems (port of baccarat.R: SYSTEMS, make_progression, system_decide, run_system)
+// A system = which side to bet x how to size the bet, plus money limits. Progressions count wins
+// and losses in units and ignore commission; pushes leave them unchanged.
+const SYSTEMS = ["Flat", "Martingale", "Paroli", "Fibonacci", "D'Alembert", "1-3-2-6",
+                 "Labouchere", "Oscar's Grind", "Chop progression (2016)", "Dragon count"];
+const SYSTEM_HELP = {
+  "Flat": "Same bet every hand.",
+  "Martingale": "Double after each loss; back to 1 unit after a win or after the step limit.",
+  "Paroli": "Double after each win; back to 1 unit after a loss or after 3 wins in a row.",
+  "Fibonacci": "Move one step up 1, 1, 2, 3, 5, 8… after a loss, two steps back after a win.",
+  "D'Alembert": "Add 1 unit after a loss, take 1 off after a win.",
+  "1-3-2-6": "Bet 1, 3, 2, 6 units on consecutive wins; back to 1 after a loss or after the 6.",
+  "Labouchere": "Line 1-2-3: bet first + last; cross both off on a win, add the bet to the line on a loss.",
+  "Oscar's Grind": "Aim for +1 unit per series: raise 1 unit after a win, never past what finishes the series.",
+  "Chop progression (2016)": "Raoul's 2016 system: bet against the last result, +1 unit per loss, sit out after 3 losses until the side changes.",
+  "Dragon count": "Flat Dragon 7 side bet only when the true count reaches the threshold.",
 };
+const FIB = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
 
-function runStrategy(shoes, fn, game, thr) {
+// cfg: {system, side: "B"|"P"|"opposite"|"same", base, tableMax, maxSteps, stopLoss, takeProfit, threshold}
+function systemConfig(c) {
+  const cfg = Object.assign({ system: "Flat", side: "B", base: 10, tableMax: 1000, maxSteps: 6,
+                              stopLoss: 0, takeProfit: 0, threshold: 4 }, c);
+  if (cfg.system === "Chop progression (2016)") cfg.side = "opposite";
+  if (cfg.system === "Dragon count") cfg.side = "D";
+  return cfg;
+}
+
+function makeProgression(system, maxSteps = 6) {
+  let k, line, u, p, sitout;
+  const reset = () => { k = 0; line = [1, 2, 3]; u = 1; p = 0; sitout = false; };
+  reset();
+  const units = () => {
+    switch (system) {
+      case "Martingale": case "Paroli": return 2 ** k;
+      case "Fibonacci": return FIB[k];
+      case "D'Alembert": return 1 + k;
+      case "1-3-2-6": return [1, 3, 2, 6][k];
+      case "Labouchere": return line.length === 1 ? line[0] : line[0] + line[line.length - 1];
+      case "Oscar's Grind": return u;
+      case "Chop progression (2016)": return sitout ? 0 : 1 + k;
+      default: return 1;
+    }
+  };
+  const update = won => {
+    const bet = units();
+    switch (system) {
+      case "Martingale": k = won ? 0 : k + 1; if (k >= maxSteps) k = 0; break;
+      case "Paroli": k = won ? k + 1 : 0; if (k >= 3) k = 0; break;
+      case "Fibonacci": k = won ? Math.max(0, k - 2) : k + 1; if (k >= Math.min(maxSteps, FIB.length)) k = 0; break;
+      case "D'Alembert": k = won ? Math.max(0, k - 1) : k + 1; if (k >= maxSteps) k = 0; break;
+      case "1-3-2-6": k = won ? (k + 1) % 4 : 0; break;
+      case "Labouchere":
+        line = won ? line.slice(1, -1) : line.concat(bet);
+        if (!line.length || line.length > 3 + maxSteps) line = [1, 2, 3]; break;
+      case "Oscar's Grind":
+        if (won) { p += bet; if (p >= 1) { u = 1; p = 0; } else u = Math.min(u + 1, 1 - p); } else p -= bet; break;
+      case "Chop progression (2016)": k = won ? 0 : k + 1; if (k >= 3) { k = 0; sitout = true; } break;
+    }
+  };
+  return { units, update, reset, sideChanged: () => { sitout = false; } };
+}
+
+// Next bet: {side: "P"|"B"|"D"|null, stake}
+function systemDecide(cfg, prog, last, tc) {
+  let side;
+  switch (cfg.side) {
+    case "B": case "P": side = cfg.side; break;
+    case "opposite": side = last === null ? null : last === "B" ? "P" : "B"; break;
+    case "same": side = last ?? "B"; break;
+    case "D": side = tc >= cfg.threshold ? "D" : null; break;
+  }
+  const u = prog.units();
+  if (!side || u <= 0) return { side: null, stake: 0 };
+  return { side, stake: Math.min(u * cfg.base, cfg.tableMax) };
+}
+
+function runSystem(shoes, cfg, game) {
+  cfg = systemConfig(cfg);
+  const prog = makeProgression(cfg.system, cfg.maxSteps);
   let net = 0, wagered = 0, bets = 0, peak = 0, worst = 0;
   const curve = [];
   for (const hands of shoes) {
-    let last = null, streak = 0, losses = 0;
+    let last = null, shoeNet = 0, stopped = false; prog.reset();
     for (const h of hands) {
-      const d = fn({ last, streak, losses, tc: h.tc }, thr);
-      if (d.bet && d.units > 0) {
-        const r = payout(h, d.bet, game) * d.units;
-        net += r; wagered += d.units; bets++;
-        if (r < 0) losses++; else if (r > 0) losses = 0;
-        peak = Math.max(peak, net); worst = Math.min(worst, net - peak);
+      if (!stopped) {
+        const d = systemDecide(cfg, prog, last, h.tc);
+        if (d.stake > 0) {
+          const r = payout(h, d.side, game);
+          net += r * d.stake; shoeNet += r * d.stake; wagered += d.stake; bets++;
+          if (r !== 0) prog.update(r > 0);
+          if ((cfg.stopLoss > 0 && shoeNet <= -cfg.stopLoss) || (cfg.takeProfit > 0 && shoeNet >= cfg.takeProfit)) stopped = true;
+          peak = Math.max(peak, net); worst = Math.min(worst, net - peak);
+        }
       }
       curve.push(net);
-      if (h.w !== "T") { streak = (h.w === last) ? streak + 1 : 1; last = h.w; }
+      if (h.w !== "T") { if (last !== null && h.w !== last) prog.sideChanged(); last = h.w; }
     }
   }
   return { net, wagered, bets, ret: wagered ? 100 * net / wagered : 0, worst, curve };
@@ -540,21 +680,31 @@ function renderRoads(winners) {
 /* ================= PLAY ================= */
 const P = { shoe: null, hands: [], k: 0, bank: 1000, start: 1000, game: "standard", chip: 25,
             bets: { P: 0, B: 25, T: 0, D: 0, N: 0 }, log: [], busy: false };
-function pNewShoe(preDeal = 0) {
-  P.shoe = newShoe(8); P.hands = playShoe(P.shoe); P.k = 0; P.log = [];
-  for (let i = 0; i < preDeal; i++) { P.k++; logHand(P.k - 1, 0, 0); }
-  showHand(P.k ? P.hands[P.k - 1] : null, false); pRender();
-  if (preDeal) $("pBanner").innerHTML = `<small>Shoe in progress: ${preDeal} hands already dealt. Place your bets.</small>`;
+// Every shoe starts on the burn: no hands dealt until the player presses Deal.
+function pNewShoe() {
+  P.shoe = newShoe(8); P.hands = playShoe(P.shoe); P.k = 0; P.log = []; P.last = null;
+  resetAuto();
+  showHand(null, false); pRender();
 }
-function logHand(i, bet, net) {
+function burnHTML(shoe) {
+  const first = shoe[0], n = BURN[rankOf(first)], showTag = $("pShowCount").checked;
+  const up = cardEl(first, { tag: showTag }).outerHTML;
+  const backs = Array.from({ length: n }, () => `<div class="card back" aria-hidden="true"></div>`).join("");
+  return `<div class="burn"><div class="burn-title">NEW SHOE · BURN</div>
+    <div class="burn-row"><div>${up}<span class="burn-cap"${showTag ? ' style="margin-top:14px"' : ""}>Face up</span></div>
+      <div><div class="backs" aria-label="${n} cards face down">${backs}</div><span class="burn-cap">${n} burned face down</span></div></div>
+    <div class="burn-note">${RANKS[rankOf(first)]} is worth ${n}, so ${n} card${n === 1 ? "" : "s"} go${n === 1 ? "es" : ""} to the discard tray. Place your bets and press Deal.</div></div>`;
+}
+function logHand(i, placed, net) {
   const h = P.hands[i], c = handCards(P.shoe, h);
-  P.log.unshift({ n: i + 1, pc: c.player, bc: c.banker, h, bet, net });
+  P.log.unshift({ n: i + 1, pc: c.player, bc: c.banker, h, placed, net });
 }
 function showHand(h, anim, done) {
   const pp = $("pP"), bb = $("pB");
   pp.innerHTML = ""; bb.innerHTML = ""; $("pPT").textContent = ""; $("pBT").textContent = ""; $("pBanner").innerHTML = "";
   document.querySelectorAll(".spot").forEach(s => s.classList.remove("win"));
-  if (!h) { pp.innerHTML = bb.innerHTML = `<span class="empty">Place your bets</span>`; done && done(); return; }
+  $("pBanner").closest(".felt").classList.toggle("at-burn", !h);
+  if (!h) { $("pBanner").innerHTML = burnHTML(P.shoe); done && done(); return; }
   const c = handCards(P.shoe, h);
   const seq = [[pp, c.player[0]], [bb, c.banker[0]], [pp, c.player[1]], [bb, c.banker[1]]];
   if (h.pn === 3) seq.push([pp, c.player[2], true]);
@@ -565,7 +715,8 @@ function showHand(h, anim, done) {
     $("pPT").textContent = h.p; $("pBT").textContent = h.b;
     const sp = h.d7 ? "DRAGON 7" : h.p8 ? "PANDA 8" : h.nat ? "Natural" : "";
     let extra = "";
-    if (anim && P.last) extra = P.last.bet > 0 ? `<small>You ${P.last.net >= 0 ? "won" : "lost"} ${fmt(Math.abs(P.last.net))}</small>` : "";
+    if (P.last && P.last.bet > 0) extra = P.last.net === 0 ? `<small>Push: your bet is returned</small>` :
+      `<small>You ${P.last.net > 0 ? "won" : "lost"} ${fmt(Math.abs(P.last.net))}</small>`;
     if (P.k === P.hands.length) extra += `<small>The cut card is out. That was the last hand of this shoe.</small>`;
     $("pBanner").innerHTML = `${RESULT[h.w]}${sp ? `<span class="sp">${sp}</span>` : ""}${extra}`;
     document.querySelectorAll(".spot").forEach(s => { const b = s.dataset.bet;
@@ -591,25 +742,103 @@ function pRender() {
       <span>True count <b class="num">${sgn(tc, 1)}</b></span>
       ${tc >= 4 ? `<span class="hot">Dragon bet favourable</span>` : `<span style="color:var(--muted)">Dragon bet becomes favourable at +4</span>`}`;
   }
-  $("pHist").innerHTML = `<tr><th>#</th><th>Player</th><th class="r">P</th><th>Banker</th><th class="r">B</th><th>Result</th><th class="r">Bet</th><th class="r">Net</th></tr>` +
+  $("pHist").innerHTML = `<tr><th>#</th><th>Player</th><th class="r">P</th><th>Banker</th><th class="r">B</th><th>Result</th><th>Bet on</th><th class="r">Net</th></tr>` +
     P.log.slice(0, 10).map(r => `<tr><td class="r">${r.n}</td><td class="cl">${labelHTML(r.pc)}</td><td class="r">${r.h.p}</td>
       <td class="cl">${labelHTML(r.bc)}</td><td class="r">${r.h.b}</td>
       <td>${RESULT[r.h.w]}${r.h.d7 ? " · Dragon 7" : r.h.p8 ? " · Panda 8" : ""}</td>
-      <td class="r">${r.bet ? fmt(r.bet, 0) : "–"}</td><td class="r ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.bet ? sgn(r.net) : "–"}</td></tr>`).join("");
+      <td>${r.placed || "–"}</td><td class="r ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.placed ? sgn(r.net) : "–"}</td></tr>`).join("");
   $("deal").disabled = P.busy;
+  $("spots").classList.toggle("locked", A.on);
+  $("pHint").textContent = A.on ? "Auto-bet is on: the system places the bets shown on the table. Turn it off to bet by hand."
+    : "Click a betting spot to add the selected chip. Bets stay in place for the next hand until you clear them. Space bar deals.";
+  renderAutoStatus();
 }
+
+/* ---- Auto-bet: progression state carries over between hands and restarts each shoe;
+        stop-loss / take-profit apply to the current shoe (same rules as Simulate) ---- */
+const A = { on: false, cfg: null, prog: null, shoeNet: 0, stopped: false, remaining: 0, timer: null, msg: "" };
+const BET_NAME = { P: "Player", B: "Banker", T: "Tie", D: "Dragon 7", N: "Panda 8" };
+const num = (id, d) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : d; };
+function readAutoCfg() {
+  return systemConfig({ system: $("aSystem").value, side: $("aSide").value, base: Math.max(1, num("aBase", 10)),
+    tableMax: Math.max(1, num("aMax", 1000)), maxSteps: Math.max(1, num("aSteps", 6)),
+    stopLoss: Math.max(0, num("aSL", 0)), takeProfit: Math.max(0, num("aTP", 0)), threshold: num("aThr", 4) });
+}
+function resetAuto() { A.cfg = readAutoCfg(); A.prog = makeProgression(A.cfg.system, A.cfg.maxSteps); A.shoeNet = 0; A.stopped = false; }
+const lastWinner = k => { for (let i = k - 1; i >= 0; i--) if (P.hands[i].w !== "T") return P.hands[i].w; return null; };
+function autoDecision() {
+  if (!A.on || A.stopped || P.k >= P.hands.length) return { side: null, stake: 0 };
+  return systemDecide(A.cfg, A.prog, lastWinner(P.k), P.hands[P.k].tc);
+}
+function applyAutoBets() {           // show the system's next bet on the table spots
+  if (!A.on) return;
+  for (const b in P.bets) P.bets[b] = 0;
+  const d = autoDecision(); if (d.stake > 0) P.bets[d.side] = d.stake;
+}
+function renderAutoStatus() {
+  $("auto").dataset.on = A.on;
+  if (!A.on) return;
+  const d = autoDecision();
+  const next = A.stopped ? "No more bets this shoe (limit reached)" : P.k >= P.hands.length ? "Shoe finished"
+    : d.stake > 0 ? `Next bet: <b>${BET_NAME[d.side]} ${fmt(d.stake, 0)}</b>` : "Next hand: sitting out";
+  $("aStatus").innerHTML = `<b>${A.cfg.system}</b><span>${next}</span>
+    <span>Shoe result <b class="num ${A.shoeNet >= 0 ? "pos" : "neg"}">${sgn(A.shoeNet)}</b></span>
+    ${A.remaining > 0 ? `<span class="hot">Autoplay: ${A.remaining} left</span>` : A.msg ? `<em>${A.msg}</em>` : ""}`;
+}
+function stopAutoplay(msg) { A.remaining = 0; clearTimeout(A.timer); A.timer = null; if (msg) A.msg = msg; renderAutoStatus(); }
+function autoplayTick() {
+  if (A.remaining <= 0) return;
+  if (P.busy) { A.timer = setTimeout(autoplayTick, 50); return; }
+  const ok = deal();
+  if (!ok) return;
+  A.remaining--;
+  if (A.remaining <= 0) { stopAutoplay(A.msg || "Autoplay finished."); return; }
+  A.timer = setTimeout(autoplayTick, +$("aSpeed").value);
+}
+function onAutoSettingChange(restart) {
+  if (restart) resetAuto(); else A.cfg = readAutoCfg();
+  $("aHelp").textContent = SYSTEM_HELP[$("aSystem").value];
+  $("aThrWrap").hidden = $("aSystem").value !== "Dragon count";
+  $("aSide").disabled = ["Chop progression (2016)", "Dragon count"].includes($("aSystem").value);
+  applyAutoBets(); pRender();
+}
+$("aSystem").innerHTML = SYSTEMS.map(s => `<option>${s}</option>`).join("");
+$("aOn").onchange = () => { A.on = $("aOn").checked; A.msg = "";
+  if (A.on) { resetAuto(); onAutoSettingChange(false); } else { stopAutoplay(); for (const b in P.bets) P.bets[b] = 0; pRender(); } };
+$("aSystem").onchange = () => onAutoSettingChange(true);
+$("aSteps").onchange = () => onAutoSettingChange(true);
+for (const id of ["aSide", "aBase", "aMax", "aSL", "aTP", "aThr"]) $(id).onchange = () => onAutoSettingChange(false);
+$("aGo").onclick = () => { A.msg = ""; A.remaining = Math.max(1, Math.min(500, num("aHands", 20))); clearTimeout(A.timer); autoplayTick(); };
+$("aStop").onclick = () => stopAutoplay("Autoplay stopped.");
+// Returns true if the table moved on (a hand was dealt or a new shoe's burn is shown)
 function deal() {
-  if (P.busy) return;
-  if (P.k >= P.hands.length) { pNewShoe(); }
+  if (P.busy) return false;
+  if (P.k >= P.hands.length) { pNewShoe(); applyAutoBets(); pRender(); return true; }   // stop on the new burn
+  applyAutoBets();
   const total = Object.values(P.bets).reduce((a, b) => a + b, 0);
-  if (total > P.bank) { $("pBanner").innerHTML = `<small>Your bets (${fmt(total, 0)}) are more than your bankroll. Clear some bets or reset the bankroll.</small>`; return; }
-  const h = P.hands[P.k];
+  if (total > P.bank) {
+    stopAutoplay("Stopped: the next bet is more than your bankroll.");
+    $("pBanner").innerHTML = `<small>Your bets (${fmt(total, 0)}) are more than your bankroll. Clear some bets or reset the bankroll.</small>`;
+    return false;
+  }
+  const h = P.hands[P.k], last = lastWinner(P.k);
   let net = 0; for (const b in P.bets) net += P.bets[b] * payout(h, b, P.game);
-  P.k++; P.bank += net; P.last = { bet: total, net }; logHand(P.k - 1, total, net);
+  const placed = Object.entries(P.bets).filter(([, v]) => v > 0).map(([b, v]) => `${BET_NAME[b]} ${fmt(v, 0)}`).join(", ");
+  if (A.on) {
+    const side = Object.keys(P.bets).find(b => P.bets[b] > 0);
+    if (side) { const r = payout(h, side, P.game); if (r !== 0) A.prog.update(r > 0); }
+    if (h.w !== "T" && last !== null && h.w !== last) A.prog.sideChanged();
+    A.shoeNet += net;
+    if (!A.stopped && A.cfg.stopLoss > 0 && A.shoeNet <= -A.cfg.stopLoss) { A.stopped = true; stopAutoplay("Stop-loss reached: no more bets this shoe."); }
+    else if (!A.stopped && A.cfg.takeProfit > 0 && A.shoeNet >= A.cfg.takeProfit) { A.stopped = true; stopAutoplay("Take-profit reached: no more bets this shoe."); }
+  }
+  P.k++; P.bank += net; P.last = { bet: total, net }; logHand(P.k - 1, placed, net);
   P.busy = true; $("deal").disabled = true;
-  showHand(h, true, () => { P.busy = false; pRender(); });
+  const fast = A.remaining > 0 && +$("aSpeed").value < 300;
+  showHand(h, !fast, () => { P.busy = false; applyAutoBets(); pRender(); });
+  return true;
 }
-document.querySelectorAll(".spot").forEach(s => s.addEventListener("click", () => { P.bets[s.dataset.bet] += P.chip; pRender(); }));
+document.querySelectorAll(".spot").forEach(s => s.addEventListener("click", () => { if (A.on) return; P.bets[s.dataset.bet] += P.chip; pRender(); }));
 document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
   P.chip = +c.dataset.v; document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === c)); }));
 document.querySelectorAll("[data-game]").forEach(b => b.addEventListener("click", () => {
@@ -618,12 +847,15 @@ $("deal").onclick = deal;
 $("clear").onclick = () => { for (const b in P.bets) P.bets[b] = 0; pRender(); };
 $("newShoe").onclick = () => pNewShoe();
 $("resetBank").onclick = () => { P.bank = P.start = 1000; pRender(); };
-$("pShowCount").onchange = pRender;
+$("pShowCount").onchange = () => { if (P.k === 0) $("pBanner").innerHTML = burnHTML(P.shoe); pRender(); };
 document.addEventListener("keydown", e => { if (e.key === " " && location.hash.replace("#", "") === "play" &&
   !["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); deal(); } });
 
 /* ================= SIMULATE ================= */
-const PALETTE = ["#6fa8f0", "#f07a6e", "#9fe0b5", "#c5a3f0", "#e8b65a", "#f5efe1"];
+const PALETTE = ["#6fa8f0", "#f07a6e", "#9fe0b5", "#c5a3f0", "#e8b65a", "#f5efe1", "#5fd0d6", "#d79a6b", "#f08fc4", "#a5b3aa"];
+const SIM_DEFAULT = ["Flat", "Martingale", "Paroli", "Fibonacci", "Chop progression (2016)", "Dragon count"];
+$("sSystems").innerHTML = SYSTEMS.map(s => `<label title="${SYSTEM_HELP[s].replace(/"/g, "&quot;")}">
+  <input type="checkbox" value="${s}" ${SIM_DEFAULT.includes(s) ? "checked" : ""}> ${s}</label>`).join("");
 function setupCanvas(cv) {
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.getAttribute("height");
   cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px";
@@ -643,7 +875,7 @@ function axes(ctx, w, h, m, y0, y1, fmtY) {
   return Y;
 }
 function drawStrategies(results) {
-  const cv = $("cStrat"), { ctx, w, h } = setupCanvas(cv), m = { l: 70, r: 14, t: 12, b: 28 };
+  const cv = $("cStrat"), { ctx, w, h } = setupCanvas(cv), m = { l: 92, r: 14, t: 12, b: 28 };
   // loop rather than Math.min(...curve): spreading 400k+ values overflows the call stack
   let y0 = 0, y1 = 0;
   for (const r of results) for (const v of r.curve) { if (v < y0) y0 = v; if (v > y1) y1 = v; }
@@ -660,7 +892,7 @@ function drawStrategies(results) {
   });
   ctx.fillStyle = tok("--muted"); ctx.textAlign = "center"; ctx.textBaseline = "top";
   for (const t of niceTicks(0, n - 1, 6)) ctx.fillText(fmt(t, 0), X(t), h - m.b + 8);
-  ctx.save(); ctx.translate(14, (h - m.b + m.t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("Net units", 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(14, (h - m.b + m.t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("Net result", 0, 0); ctx.restore();
   $("lStrat").innerHTML = results.map((r, k) => `<span><i style="background:${PALETTE[k % PALETTE.length]}"></i>${r.name}</span>`).join("") +
     `<span style="color:var(--muted)">x axis: hands played</span>`;
 }
@@ -697,8 +929,11 @@ function runSim() {
     $("sStatus").textContent = "Scoring strategies…";
     setTimeout(() => {
       const ex = exactCache[decks] || (exactCache[decks] = exactOdds(decks));
-      const strat = Object.entries(STRATEGIES).map(([name, fn]) =>
-        ({ name: name === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : name, ...runStrategy(shoes, fn, game, thr) }));
+      const chosen = [...document.querySelectorAll("#sSystems input:checked")].map(x => x.value);
+      const money = { side: $("sSide").value, base: Math.max(1, num("sBase", 10)), tableMax: Math.max(1, num("sMax", 1000)),
+        maxSteps: Math.max(1, num("sSteps", 6)), stopLoss: Math.max(0, num("sSL", 0)), takeProfit: Math.max(0, num("sTP", 0)), threshold: thr };
+      const strat = chosen.map(system => ({ name: system === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : system,
+        ...runSystem(shoes, { ...money, system }, game) }));
       simCache = { shoes, ex, strat, game, decks };
       renderSim();
       $("sStatus").textContent = `Done in ${fmt((performance.now() - t0) / 1000, 1)} s.`;
@@ -722,10 +957,12 @@ function renderSim() {
       const m = s / N, sd = Math.sqrt((s2 - N * m * m) / (N - 1));
       return `<tr><td>${name}</td><td class="r">${fmt(-100 * m, 3)}%</td><td class="r">${fmt(196 * sd / Math.sqrt(N), 3)}</td><td class="r">${fmt(100 * ex.edge[key], 3)}%</td></tr>`;
     }).join("");
-  $("sStrat").innerHTML = `<tr><th>Strategy</th><th class="r">Hands bet</th><th class="r">Units wagered</th><th class="r">Net units</th><th class="r">Return</th><th class="r">Worst drawdown</th></tr>` +
+  if (!strat.length) { $("sStrat").innerHTML = `<tr><td>Tick at least one betting system to compare.</td></tr>`;
+    $("cStrat").getContext("2d").clearRect(0, 0, 1e4, 1e4); $("lStrat").innerHTML = ""; }
+  else $("sStrat").innerHTML = `<tr><th>System</th><th class="r">Hands bet</th><th class="r">Wagered</th><th class="r">Net</th><th class="r">Return</th><th class="r">Worst drawdown</th></tr>` +
     strat.map(r => `<tr><td>${r.name}</td><td class="r">${fmt(r.bets, 0)}</td><td class="r">${fmt(r.wagered, 0)}</td>
       <td class="r ${r.net >= 0 ? "pos" : "neg"}">${sgn(r.net, 0)}</td><td class="r ${r.ret >= 0 ? "pos" : "neg"}">${sgn(r.ret, 2)}%</td><td class="r">${fmt(r.worst, 0)}</td></tr>`).join("");
-  drawStrategies(strat);
+  if (strat.length) drawStrategies(strat);
   const d = dragonByCount(shoes);
   drawBars($("cDragon"), ["<−2", "−2…0", "0…2", "2…4", "4…6", "≥6"], d.map(r => r.ev), {
     err: d.map(r => r.ci), color: v => v >= 0 ? tok("--tie") : tok("--banker"), fmtY: v => v + "%" });
@@ -803,7 +1040,7 @@ function route() {
 }
 addEventListener("hashchange", route);
 
-pNewShoe(8);
+pNewShoe();
 tNewShoe();
 route();
 })();
