@@ -425,8 +425,8 @@ simulplay <- function(n = 20) {
     sresult <- liveshoe[,1]
     noties <- sresult[sresult != "/"]
     r_nties <- rle(substr(noties,1,1))
-    brun <- max(r_nties$lengths[r_nties$values=="B"])
-    prun <- max(r_nties$lengths[r_nties$values=="P"])
+    brun <- max(c(0, r_nties$lengths[r_nties$values=="B"]))
+    prun <- max(c(0, r_nties$lengths[r_nties$values=="P"]))
     #indexc <- which(liveshoe[,1]=="BD")
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
   # Save to csv file and remove cards object from the list
