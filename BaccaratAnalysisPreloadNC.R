@@ -253,13 +253,13 @@ StartLiveGame <- function(s = NewBaccShoe(),
         if (dv) {
           cat(sprintf("Player Wins: Natural %d vs. %d  \n", pscore, bscore))
         }
-        board <- c(board, "P",1)
+        board <- c(board, "P", pscore - bscore)
       }
       if (bscore > pscore) {
         if (dv) {
           cat(sprintf("Banker Wins: Natural %d vs. %d  \n", bscore, pscore))
         }
-        board <- c(board, "B", 1)
+        board <- c(board, "B", bscore - pscore)
       }
       if (bscore == pscore) {
         if (dv) {
@@ -432,7 +432,7 @@ simulplay <- function(s = NewBaccShoe(), n = 20) {
   
   for (i in 1:n) {
     # Check s argument if preloaded
-    if (class(s) == "matrix") {
+    if (is.matrix(s)) {
       ls <- StartLiveGame(s[i, ], dv = 0)
     } else{
       ls <- StartLiveGame(dv = 0)
@@ -445,9 +445,9 @@ simulplay <- function(s = NewBaccShoe(), n = 20) {
     noties <- sresult[sresult != "/"]
     r_nties <- rle(substr(noties, 1, 1))
     cleanboard <- c(cleanboard, r_nties$length)
-    credits <- bettingsys(r_nties$length)
-    brun <- max(r_nties$lengths[r_nties$values == "B"])
-    prun <- max(r_nties$lengths[r_nties$values == "P"])
+    credits <- bettingsys(r_nties$lengths)
+    brun <- max(c(0, r_nties$lengths[r_nties$values == "B"]))
+    prun <- max(c(0, r_nties$lengths[r_nties$values == "P"]))
     dcount <-
       c(dcount, c(
         sum(liveshoe[, 1] == "BD"),
@@ -520,7 +520,7 @@ bettingsys <- function(gseq) {
   }
   pseq <- gseq[1]
   
-  for (i in 2:length(gseq)) {
+  for (i in seq_along(gseq)[-1]) {
     # cat(sprintf("PSEQ: %d",pseq))
     if (gseq[i] > 3) {
       credits <- credits + pseq - 6

@@ -448,7 +448,7 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
   
   for (i in 1:n) {
     # Check s argument if preloaded
-    if (class(s)=="matrix"){
+    if (is.matrix(s)){
       ls <- StartLiveGame(s[i,],dv=0)
     }else{
       ls <- StartLiveGame(dv=0)
@@ -468,8 +468,8 @@ simulplay <- function(s=NewBaccShoe(), n = 20) {
     sresult <- liveshoe[,1]
     noties <- sresult[sresult != "/"]
     r_nties <- rle(substr(noties,1,1))
-    brun <- max(r_nties$lengths[r_nties$values=="B"])
-    prun <- max(r_nties$lengths[r_nties$values=="P"])
+    brun <- max(c(0, r_nties$lengths[r_nties$values=="B"]))
+    prun <- max(c(0, r_nties$lengths[r_nties$values=="P"]))
     dcount <- c(dcount, c(sum(liveshoe[,1] == "BD"), sum(liveshoe[,1]=="PP"),sum(liveshoe[,1]=="/"),sum(liveshoe[,1] == "P"),sum(liveshoe[,1] == "B"), brun, prun))
     setTxtProgressBar(pb, i)
     }
