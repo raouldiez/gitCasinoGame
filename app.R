@@ -120,6 +120,8 @@ table.road { border-collapse: collapse; } table.road td { width: 22px; height: 2
 .count-box { background: #fff8e1; border-radius: 10px; padding: 10px 14px; }
 .hot { background: #ffd166; color: #3d2c00; border-radius: 6px; padding: 2px 8px; font-weight: 700; }
 .legend span { margin-right: 10px; }
+.credits { font-size: .8rem; color: #6c757d; text-align: center; padding: 18px 16px 24px; max-width: 900px; margin: 0 auto; }
+.credits a { color: inherit; }
 .feedback-ok { color: #2e7d32; font-weight: 700; } .feedback-bad { color: #c62828; font-weight: 700; }
 "
 
@@ -152,6 +154,13 @@ ui <- bslib::page_navbar(
   fillable = FALSE,   # let the page scroll instead of squeezing panels to fit the window
   theme = bslib::bs_theme(version = 5, primary = "#1f6b45"),
   header = tags$head(tags$style(HTML(css))),
+  # one HTML string: tags() would put a space between each link and the full stop after it
+  footer = div(class = "credits", HTML(paste0(
+    "Baccarat Simulator by Raoul R. Diez (2016; v2 2026, built with help from Claude by Anthropic). ",
+    "Dragon 7 count: Eliot Jacobson, Ph.D., ",
+    "<a href='https://wizardofodds.com/games/baccarat/' target='_blank'>via Wizard of Odds</a>. ",
+    "Exact odds checked against figures published by Michael Shackleford (Wizard of Odds). ",
+    "<a href='https://github.com/raouldiez/gitCasinoGame' target='_blank'>Source on GitHub</a>."))),
 
   # ---- Play -------------------------------------------------------------------
   bslib::nav_panel("Play",

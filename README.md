@@ -102,3 +102,23 @@ Run the tests with `Rscript tests.R`.
 simulator, kept for reference. They were patched to run on R ≥ 4.2 (the `class(s) == "matrix"` check),
 so they no longer crash on shoes with no Banker or Player run or with a single run, and naturals now
 record their real point spread.
+
+## Credits
+
+* **Raoul R. Diez**: author. Wrote the original simulator in 2016 (`BaccaratAnalysis*.R`),
+  including the idea of tracking 8s and 9s for the Dragon 7 bet, and directed the 2026 v2 rewrite.
+* **Eliot Jacobson, Ph.D.**: the Dragon 7 card count used throughout (tags 4–7 = −1, 8–9 = +2;
+  bet at a true count of +4 or more), from his analysis *Card Counting the Dragon Side Bet in
+  EZ Baccarat* (2011), published on [Wizard of Odds](https://wizardofodds.com/games/baccarat/).
+  More of his work is at [apheat.net](https://www.apheat.net/).
+* **Michael Shackleford (Wizard of Odds)**: published 8-deck baccarat probabilities and house
+  edges, which `tests.R` uses to check `exact_odds()` and the simulator.
+* **Claude (Anthropic)**: helped write v2: the engine, tests, Shiny app and browser version.
+  Those commits are marked `Co-Authored-By: Claude`.
+* **Tools**: [R](https://www.r-project.org/), [Shiny](https://shiny.posit.co/) and
+  [bslib](https://rstudio.github.io/bslib/). The browser version uses the Cormorant Garamond and IBM Plex
+  fonts from [Google Fonts](https://fonts.google.com/) (SIL Open Font License).
+
+The betting systems (Martingale, Paroli, Fibonacci, D'Alembert, 1-3-2-6, Labouchère, Oscar's Grind)
+are traditional systems in the public domain. They are included to show that bet sizing cannot
+overcome the house edge, not as recommendations.

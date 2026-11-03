@@ -176,6 +176,10 @@ canvas { width: 100%; display: block; }
 .fb { margin-top: 10px; display: grid; gap: 4px; font-weight: 500; }
 .legend-tags { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: .9rem; }
 
+.credits { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; border-top: 1px solid var(--line);
+           color: var(--muted); font-size: .8rem; text-align: center; }
+.credits p { margin: 6px auto; max-width: 90ch; }
+.credits a { color: var(--brass); }
 @media (max-width: 820px) {
   .two, .simgrid { grid-template-columns: 1fr; }
   .spots { grid-template-columns: repeat(3, 1fr); }
@@ -363,6 +367,14 @@ canvas { width: 100%; display: block; }
   </div>
 </section>
 </main>
+<footer class="credits">
+  <p>Baccarat Table by Raoul R. Diez: simulator first written in R in 2016, rebuilt in 2026 with help from Claude (Anthropic).</p>
+  <p>Dragon 7 count by Eliot Jacobson, Ph.D., from <i>Card Counting the Dragon Side Bet in EZ Baccarat</i>,
+    published on <a href="https://wizardofodds.com/games/baccarat/">Wizard of Odds</a>.
+    Exact odds checked against figures published by Michael Shackleford (Wizard of Odds).
+    Betting systems are traditional and shown for comparison, not as advice.</p>
+  <p><a href="https://github.com/raouldiez/gitCasinoGame">Source code on GitHub</a></p>
+</footer>
 
 <script>
 // Baccarat engine — JavaScript port of baccarat.R (same rules, same Dragon count)
