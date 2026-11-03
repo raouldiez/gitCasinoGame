@@ -104,7 +104,10 @@ section[hidden] { display: none !important; }
 .banner .sp { color: var(--brass); margin-left: .4em; letter-spacing: .08em; }
 .banner small { display: block; font: 500 .95rem var(--body); color: var(--ink); }
 
-.spots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.spots { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.paytable { font-size: .82rem; color: var(--muted); }
+.paytable summary { cursor: pointer; color: var(--ink); }
+.paytable table { width: auto; margin-top: 6px; } .paytable td { padding: 3px 14px 3px 0; border: 0; }
 .spot { border: 1.5px solid rgba(201,162,74,.7); background: rgba(0,0,0,.12); border-radius: 14px; padding: 10px 6px;
         text-align: center; cursor: pointer; display: grid; gap: 2px; transition: background .15s; }
 .spot:hover { background: rgba(0,0,0,.24); }
@@ -226,8 +229,10 @@ canvas { width: 100%; display: block; }
       <button class="spot P" data-bet="P"><b>PLAYER</b><span class="pay">pays 1 to 1</span><span class="amt"></span></button>
       <button class="spot T" data-bet="T"><b>TIE</b><span class="pay">pays 8 to 1</span><span class="amt"></span></button>
       <button class="spot B" data-bet="B"><b>BANKER</b><span class="pay" id="bankerPay">pays 0.95 to 1</span><span class="amt"></span></button>
-      <button class="spot" data-bet="D"><b>DRAGON 7</b><span class="pay">pays 40 to 1</span><span class="amt"></span></button>
-      <button class="spot" data-bet="N"><b>PANDA 8</b><span class="pay">pays 25 to 1</span><span class="amt"></span></button>
+      <button class="spot P" data-bet="DP"><b>DRAGON BONUS</b><span class="pay">Player side · up to 30 to 1</span><span class="amt"></span></button>
+      <button class="spot B" data-bet="DB"><b>DRAGON BONUS</b><span class="pay">Banker side · up to 30 to 1</span><span class="amt"></span></button>
+      <button class="spot" data-bet="D" data-ez-only><b>DRAGON 7</b><span class="pay">pays 40 to 1</span><span class="amt"></span></button>
+      <button class="spot" data-bet="N" data-ez-only><b>PANDA 8</b><span class="pay">pays 25 to 1</span><span class="amt"></span></button>
     </div>
   </div>
 
@@ -250,6 +255,15 @@ canvas { width: 100%; display: block; }
     <button class="btn" id="resetBank">Reset bankroll</button>
   </div>
   <p class="note" style="margin-top:-6px" id="pHint">Click a betting spot to add the selected chip. Bets stay in place for the next hand until you clear them. Space bar deals.</p>
+  <details class="paytable">
+    <summary>Dragon Bonus pay table (Player or Banker side, both games)</summary>
+    <table>
+      <tr><td>Natural win</td><td>1 to 1</td><td>Win by 9</td><td>30 to 1</td><td>Win by 6</td><td>4 to 1</td></tr>
+      <tr><td>Natural tie</td><td>Push</td><td>Win by 8</td><td>10 to 1</td><td>Win by 5</td><td>2 to 1</td></tr>
+      <tr><td></td><td></td><td>Win by 7</td><td>6 to 1</td><td>Win by 4</td><td>1 to 1</td></tr>
+      <tr><td colspan="6">Win by 0–3, a non-natural tie, or a loss: the bet loses.</td></tr>
+    </table>
+  </details>
 
   <div class="panel auto" id="auto" data-on="false">
     <label class="tog"><input type="checkbox" id="aOn"> <b>Auto-bet with a system</b></label>
@@ -454,9 +468,20 @@ function handCards(shoe, h) {
            order: Array.from({length: h.used}, (_, k) => c(k)) };
 }
 
+// Dragon Bonus (both games): natural winner 1 to 1, natural tie push; non-natural winner by margin
+const DRAGON_BONUS_PAY = { 4: 1, 5: 2, 6: 4, 7: 6, 8: 10, 9: 30 };
+function dragonBonus(margin, nat) {
+  if (nat) return margin > 0 ? 1 : margin === 0 ? 0 : -1;
+  return margin >= 4 ? DRAGON_BONUS_PAY[margin] : -1;
+}
+// Bets each game offers: Dragon Bonus on both; Dragon 7 and Panda 8 only in EZ Baccarat
+const GAME_BETS = { standard: ["P", "B", "T", "DP", "DB"], ez: ["P", "B", "T", "DP", "DB", "D", "N"] };
+
 // Net per 1 unit wagered
 function payout(h, bet, game) {
   switch (bet) {
+    case "DP": return dragonBonus(h.p - h.b, h.nat);
+    case "DB": return dragonBonus(h.b - h.p, h.nat);
     case "P": return h.w === "P" ? 1 : h.w === "B" ? -1 : 0;
     case "B": return h.w === "B" ? (game === "ez" ? (h.d7 ? 0 : 1) : 0.95) : h.w === "P" ? -1 : 0;
     case "T": return h.w === "T" ? 8 : -1;
@@ -469,12 +494,13 @@ function payout(h, bet, game) {
 // Exact off-the-top odds by enumerating all 10^6 point-value sequences of 6 cards
 function exactOdds(decks = 8) {
   const n = [16, 4, 4, 4, 4, 4, 4, 4, 4, 4].map(x => x * decks), N = n.reduce((a, b) => a + b);
-  let B = 0, P = 0, T = 0, D7 = 0, P8 = 0;
+  let B = 0, P = 0, T = 0, D7 = 0, P8 = 0, evDP = 0, evDB = 0;
   const g = [0, 0, 0, 0, 0, 0];
   const rec = (k, prob, used) => {
     if (k === 6) {
       let p = (g[0] + g[2]) % 10, b = (g[1] + g[3]) % 10, pd = false, bd = false;
-      if (!(p >= 8 || b >= 8)) {
+      const nat = p >= 8 || b >= 8;
+      if (!nat) {
         let col = 10, next = 4;
         if (p <= 5) { pd = true; col = g[4]; p = (p + g[4]) % 10; next = 5; }
         if (BANKER_DRAW[b][col]) { bd = true; b = (b + g[next]) % 10; }
@@ -482,6 +508,7 @@ function exactOdds(decks = 8) {
       if (p > b) { P += prob; if (pd && p === 8) P8 += prob; }
       else if (b > p) { B += prob; if (bd && b === 7) D7 += prob; }
       else T += prob;
+      evDP += prob * dragonBonus(p - b, nat); evDB += prob * dragonBonus(b - p, nat);
       return;
     }
     for (let v = 0; v < 10; v++) {
@@ -492,7 +519,8 @@ function exactOdds(decks = 8) {
   rec(0, 1, new Array(10).fill(0));
   return { prob: { B, P, T, D7, P8 }, edge: {
     "Player": B - P, "Banker (5% comm.)": P - 0.95 * B, "Banker (EZ)": P - (B - D7),
-    "Tie": 1 - 9 * T, "Dragon 7": 1 - 41 * D7, "Panda 8": 1 - 26 * P8 } };
+    "Tie": 1 - 9 * T, "Dragon 7": 1 - 41 * D7, "Panda 8": 1 - 26 * P8,
+    "Dragon Bonus Player": -evDP, "Dragon Bonus Banker": -evDB } };
 }
 
 // ---- Betting systems (port of baccarat.R: SYSTEMS, make_progression, system_decide, run_system)
@@ -645,6 +673,8 @@ const fmt = (x, d = 2) => x.toLocaleString("en-US", { minimumFractionDigits: d, 
 const sgn = (x, d = 2) => (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const RESULT = { P: "Player wins", B: "Banker wins", T: "Tie" };
+// "Banker wins by 6": the margin is what settles the Dragon Bonus
+const resultText = h => h.w === "T" ? "Tie" : `${RESULT[h.w]} by ${Math.abs(h.p - h.b)}`;
 const CSS = getComputedStyle(document.documentElement);
 const tok = n => CSS.getPropertyValue(n).trim();
 
@@ -679,7 +709,7 @@ function renderRoads(winners) {
 
 /* ================= PLAY ================= */
 const P = { shoe: null, hands: [], k: 0, bank: 1000, start: 1000, game: "standard", chip: 25,
-            bets: { P: 0, B: 25, T: 0, D: 0, N: 0 }, log: [], busy: false };
+            bets: { P: 0, B: 25, T: 0, DP: 0, DB: 0, D: 0, N: 0 }, log: [], busy: false };
 // Every shoe starts on the burn: no hands dealt until the player presses Deal.
 function pNewShoe() {
   P.shoe = newShoe(8); P.hands = playShoe(P.shoe); P.k = 0; P.log = []; P.last = null;
@@ -697,7 +727,7 @@ function burnHTML(shoe) {
 }
 function logHand(i, placed, net) {
   const h = P.hands[i], c = handCards(P.shoe, h);
-  P.log.unshift({ n: i + 1, pc: c.player, bc: c.banker, h, placed, net });
+  P.log.unshift({ n: i + 1, pc: c.player, bc: c.banker, h, placed, net, game: P.game });
 }
 function showHand(h, anim, done) {
   const pp = $("pP"), bb = $("pB");
@@ -713,12 +743,13 @@ function showHand(h, anim, done) {
   seq.forEach(([el, id, third], i) => setTimeout(() => el.appendChild(cardEl(id, { third, anim: step > 0 })), i * step));
   setTimeout(() => {
     $("pPT").textContent = h.p; $("pBT").textContent = h.b;
-    const sp = h.d7 ? "DRAGON 7" : h.p8 ? "PANDA 8" : h.nat ? "Natural" : "";
+    const ez = P.game === "ez";   // Dragon 7 / Panda 8 are only events at an EZ table
+    const sp = ez && h.d7 ? "DRAGON 7" : ez && h.p8 ? "PANDA 8" : h.nat ? "Natural" : "";
     let extra = "";
     if (P.last && P.last.bet > 0) extra = P.last.net === 0 ? `<small>Push: your bet is returned</small>` :
       `<small>You ${P.last.net > 0 ? "won" : "lost"} ${fmt(Math.abs(P.last.net))}</small>`;
     if (P.k === P.hands.length) extra += `<small>The cut card is out. That was the last hand of this shoe.</small>`;
-    $("pBanner").innerHTML = `${RESULT[h.w]}${sp ? `<span class="sp">${sp}</span>` : ""}${extra}`;
+    $("pBanner").innerHTML = `${resultText(h)}${sp ? `<span class="sp">${sp}</span>` : ""}${extra}`;
     document.querySelectorAll(".spot").forEach(s => { const b = s.dataset.bet;
       if ((b === h.w) || (b === "D" && h.d7) || (b === "N" && h.p8)) s.classList.add("win"); });
     done && done();
@@ -745,7 +776,7 @@ function pRender() {
   $("pHist").innerHTML = `<tr><th>#</th><th>Player</th><th class="r">P</th><th>Banker</th><th class="r">B</th><th>Result</th><th>Bet on</th><th class="r">Net</th></tr>` +
     P.log.slice(0, 10).map(r => `<tr><td class="r">${r.n}</td><td class="cl">${labelHTML(r.pc)}</td><td class="r">${r.h.p}</td>
       <td class="cl">${labelHTML(r.bc)}</td><td class="r">${r.h.b}</td>
-      <td>${RESULT[r.h.w]}${r.h.d7 ? " · Dragon 7" : r.h.p8 ? " · Panda 8" : ""}</td>
+      <td>${resultText(r.h)}${r.game === "ez" && r.h.d7 ? " · Dragon 7" : r.game === "ez" && r.h.p8 ? " · Panda 8" : r.h.nat ? " · Natural" : ""}</td>
       <td>${r.placed || "–"}</td><td class="r ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.placed ? sgn(r.net) : "–"}</td></tr>`).join("");
   $("deal").disabled = P.busy;
   $("spots").classList.toggle("locked", A.on);
@@ -757,7 +788,10 @@ function pRender() {
 /* ---- Auto-bet: progression state carries over between hands and restarts each shoe;
         stop-loss / take-profit apply to the current shoe (same rules as Simulate) ---- */
 const A = { on: false, cfg: null, prog: null, shoeNet: 0, stopped: false, remaining: 0, timer: null, msg: "" };
-const BET_NAME = { P: "Player", B: "Banker", T: "Tie", D: "Dragon 7", N: "Panda 8" };
+const BET_NAME = { P: "Player", B: "Banker", T: "Tie", D: "Dragon 7", N: "Panda 8",
+                   DP: "Dragon Bonus Player", DB: "Dragon Bonus Banker" };
+// Dragon 7 is only offered in EZ Baccarat, so the Dragon count sits out at a standard table
+const dragonCountIdle = () => A.cfg && A.cfg.system === "Dragon count" && P.game === "standard";
 const num = (id, d) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : d; };
 function readAutoCfg() {
   return systemConfig({ system: $("aSystem").value, side: $("aSide").value, base: Math.max(1, num("aBase", 10)),
@@ -767,7 +801,7 @@ function readAutoCfg() {
 function resetAuto() { A.cfg = readAutoCfg(); A.prog = makeProgression(A.cfg.system, A.cfg.maxSteps); A.shoeNet = 0; A.stopped = false; }
 const lastWinner = k => { for (let i = k - 1; i >= 0; i--) if (P.hands[i].w !== "T") return P.hands[i].w; return null; };
 function autoDecision() {
-  if (!A.on || A.stopped || P.k >= P.hands.length) return { side: null, stake: 0 };
+  if (!A.on || A.stopped || P.k >= P.hands.length || dragonCountIdle()) return { side: null, stake: 0 };
   return systemDecide(A.cfg, A.prog, lastWinner(P.k), P.hands[P.k].tc);
 }
 function applyAutoBets() {           // show the system's next bet on the table spots
@@ -780,6 +814,7 @@ function renderAutoStatus() {
   if (!A.on) return;
   const d = autoDecision();
   const next = A.stopped ? "No more bets this shoe (limit reached)" : P.k >= P.hands.length ? "Shoe finished"
+    : dragonCountIdle() ? "Sitting out: Dragon 7 is only offered in EZ Baccarat"
     : d.stake > 0 ? `Next bet: <b>${BET_NAME[d.side]} ${fmt(d.stake, 0)}</b>` : "Next hand: sitting out";
   $("aStatus").innerHTML = `<b>${A.cfg.system}</b><span>${next}</span>
     <span>Shoe result <b class="num ${A.shoeNet >= 0 ? "pos" : "neg"}">${sgn(A.shoeNet)}</b></span>
@@ -841,8 +876,15 @@ function deal() {
 document.querySelectorAll(".spot").forEach(s => s.addEventListener("click", () => { if (A.on) return; P.bets[s.dataset.bet] += P.chip; pRender(); }));
 document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
   P.chip = +c.dataset.v; document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === c)); }));
+// Dragon 7 and Panda 8 spots exist only at an EZ table; leaving EZ clears any chips on them
+function applyGameSpots() {
+  document.querySelectorAll("[data-ez-only]").forEach(s => s.hidden = P.game !== "ez");
+  if (P.game !== "ez") { P.bets.D = 0; P.bets.N = 0; }
+}
 document.querySelectorAll("[data-game]").forEach(b => b.addEventListener("click", () => {
-  P.game = b.dataset.game; document.querySelectorAll("[data-game]").forEach(x => x.setAttribute("aria-pressed", x === b)); pRender(); }));
+  P.game = b.dataset.game; document.querySelectorAll("[data-game]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  applyGameSpots(); applyAutoBets(); pRender(); }));
+applyGameSpots();
 $("deal").onclick = deal;
 $("clear").onclick = () => { for (const b in P.bets) P.bets[b] = 0; pRender(); };
 $("newShoe").onclick = () => pNewShoe();
@@ -932,9 +974,12 @@ function runSim() {
       const chosen = [...document.querySelectorAll("#sSystems input:checked")].map(x => x.value);
       const money = { side: $("sSide").value, base: Math.max(1, num("sBase", 10)), tableMax: Math.max(1, num("sMax", 1000)),
         maxSteps: Math.max(1, num("sSteps", 6)), stopLoss: Math.max(0, num("sSL", 0)), takeProfit: Math.max(0, num("sTP", 0)), threshold: thr };
-      const strat = chosen.map(system => ({ name: system === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : system,
+      // Dragon 7 is EZ-only, so the Dragon count has nothing to bet at a standard table
+      const skipped = game === "standard" && chosen.includes("Dragon count");
+      const strat = chosen.filter(s => !(skipped && s === "Dragon count")).map(system => ({
+        name: system === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : system,
         ...runSystem(shoes, { ...money, system }, game) }));
-      simCache = { shoes, ex, strat, game, decks };
+      simCache = { shoes, ex, strat, game, decks, skipped };
       renderSim();
       $("sStatus").textContent = `Done in ${fmt((performance.now() - t0) / 1000, 1)} s.`;
       $("sRun").disabled = false;
@@ -950,18 +995,21 @@ function renderSim() {
     ["Dragon 7", pct(hands.filter(h => h.d7).length)], ["Panda 8", pct(hands.filter(h => h.p8).length)]]
     .map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
   const bets = [["Player", "P", "Player"], ["Banker", "B", game === "ez" ? "Banker (EZ)" : "Banker (5% comm.)"],
-                ["Tie", "T", "Tie"], ["Dragon 7", "D", "Dragon 7"], ["Panda 8", "N", "Panda 8"]];
+                ["Tie", "T", "Tie"], ["Dragon Bonus Player", "DP", "Dragon Bonus Player"],
+                ["Dragon Bonus Banker", "DB", "Dragon Bonus Banker"],
+                ...(game === "ez" ? [["Dragon 7", "D", "Dragon 7"], ["Panda 8", "N", "Panda 8"]] : [])];
   $("sEdge").innerHTML = `<tr><th>Bet</th><th class="r">Simulated</th><th class="r">±95%</th><th class="r">Exact</th></tr>` +
     bets.map(([name, b, key]) => {
       let s = 0, s2 = 0; for (const h of hands) { const r = payout(h, b, game); s += r; s2 += r * r; }
       const m = s / N, sd = Math.sqrt((s2 - N * m * m) / (N - 1));
       return `<tr><td>${name}</td><td class="r">${fmt(-100 * m, 3)}%</td><td class="r">${fmt(196 * sd / Math.sqrt(N), 3)}</td><td class="r">${fmt(100 * ex.edge[key], 3)}%</td></tr>`;
     }).join("");
-  if (!strat.length) { $("sStrat").innerHTML = `<tr><td>Tick at least one betting system to compare.</td></tr>`;
+  const skipNote = simCache.skipped ? `<tr><td colspan="6" class="note">Dragon count was left out: the Dragon 7 bet is only offered in EZ Baccarat. Switch the game to EZ to include it.</td></tr>` : "";
+  if (!strat.length) { $("sStrat").innerHTML = (skipNote || `<tr><td>Tick at least one betting system to compare.</td></tr>`);
     $("cStrat").getContext("2d").clearRect(0, 0, 1e4, 1e4); $("lStrat").innerHTML = ""; }
   else $("sStrat").innerHTML = `<tr><th>System</th><th class="r">Hands bet</th><th class="r">Wagered</th><th class="r">Net</th><th class="r">Return</th><th class="r">Worst drawdown</th></tr>` +
     strat.map(r => `<tr><td>${r.name}</td><td class="r">${fmt(r.bets, 0)}</td><td class="r">${fmt(r.wagered, 0)}</td>
-      <td class="r ${r.net >= 0 ? "pos" : "neg"}">${sgn(r.net, 0)}</td><td class="r ${r.ret >= 0 ? "pos" : "neg"}">${sgn(r.ret, 2)}%</td><td class="r">${fmt(r.worst, 0)}</td></tr>`).join("");
+      <td class="r ${r.net >= 0 ? "pos" : "neg"}">${sgn(r.net, 0)}</td><td class="r ${r.ret >= 0 ? "pos" : "neg"}">${sgn(r.ret, 2)}%</td><td class="r">${fmt(r.worst, 0)}</td></tr>`).join("") + skipNote;
   if (strat.length) drawStrategies(strat);
   const d = dragonByCount(shoes);
   drawBars($("cDragon"), ["<−2", "−2…0", "0…2", "2…4", "4…6", "≥6"], d.map(r => r.ev), {

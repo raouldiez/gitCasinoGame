@@ -104,4 +104,23 @@ ok(identical(stakes(c("B", "B", "B", "B"), "Flat", "P", stop_loss = 20), c(10, 1
 ok(identical(stakes(c("P", "P", "P", "P"), "Flat", "P", take_profit = 20), c(10, 10, 0, 0)),
    "take-profit ends betting for the rest of the shoe")
 
+# ---- Dragon Bonus (standard game side bet) ----
+ok(abs(ex$house_edge["DragonBonusP"] - 0.0265) < 5e-5 && abs(ex$house_edge["DragonBonusB"] - 0.0937) < 5e-5,
+   sprintf("Dragon Bonus 8-deck edges: Player %.4f%%, Banker %.4f%% (published 2.65%%, 9.37%%)",
+           100 * ex$house_edge["DragonBonusP"], 100 * ex$house_edge["DragonBonusB"]))
+db <- function(...) { h <- one(...); c(P = settle(h)$DragonBonusP, B = settle(h)$DragonBonusB) }
+ok(identical(db(9, 13, 13, 7), c(P = 1, B = -1)), "natural winner pays 1 to 1 (Player 9 vs Banker 7)")
+ok(identical(db(4, 4, 4, 4), c(P = 0, B = 0)), "natural tie (8-8) pushes both sides")
+ok(identical(db(13, 13, 13, 13, 9, 13), c(P = 30, B = -1)), "non-natural win by 9 pays 30 to 1")
+# Cards below: P1 B1 P2 B2 P3 B3; Kings are 0, so both hands start at 0 and both draw.
+ok(identical(db(13, 13, 13, 13, 8, 13), c(P = 10, B = -1)), "non-natural win by 8 pays 10 to 1 (8 vs 0)")
+ok(identical(db(13, 13, 13, 13, 1, 7), c(P = -1, B = 4)), "Banker non-natural win by 6 pays 4 to 1 (7 vs 1)")
+ok(identical(db(13, 13, 13, 13, 6, 2), c(P = 1, B = -1)), "non-natural win by 4 pays 1 to 1 (6 vs 2)")
+ok(identical(db(13, 13, 13, 13, 5, 2), c(P = -1, B = -1)), "non-natural win by 3 loses (5 vs 2)")
+ok(identical(db(13, 13, 13, 13, 5, 5), c(P = -1, B = -1)), "non-natural tie loses both sides (5 vs 5)")
+ok(identical(house_edge(simulate_shoes(50, seed = 1, progress = FALSE), "standard")$bet,
+             c("Player", "Banker", "Tie", "DragonBonusP", "DragonBonusB")) &&
+   identical(house_edge(simulate_shoes(50, seed = 1, progress = FALSE), "ez")$bet,
+             c("Player", "Banker", "Tie", "DragonBonusP", "DragonBonusB", "Dragon7", "Panda8")),
+   "Both games offer Dragon Bonus; EZ adds Dragon 7 and Panda 8")
 cat("\nAll tests passed.\n")

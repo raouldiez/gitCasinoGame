@@ -179,6 +179,26 @@ simulate_shoes <- function(n_shoes = 1000, decks = 8, cut_card = 14, seed = NULL
 }
 
 # ---- Payouts -------------------------------------------------------------
+# Which side bets each game offers. Both games carry the Dragon Bonus on Player or Banker;
+# EZ Baccarat (no commission) adds Dragon 7 (40:1) and Panda 8 (25:1).
+SIDE_BETS <- list(standard = c("DragonBonusP", "DragonBonusB"),
+                  ez       = c("DragonBonusP", "DragonBonusB", "Dragon7", "Panda8"))
+
+# Dragon Bonus: natural winner 1 to 1, natural tie push; a non-natural winner pays by margin.
+# Everything else (including a non-natural tie) loses.
+DRAGON_BONUS_PAY <- c(`4` = 1, `5` = 2, `6` = 4, `7` = 6, `8` = 10, `9` = 30)
+
+# Net per 1 unit on the Dragon Bonus for `side` ("P" or "B"). A natural ends the hand with
+# two cards each, so a natural winner always holds the 8 or 9.
+dragon_bonus <- function(h, side = c("P", "B")) {
+  side <- match.arg(side)
+  if (!all(c("p_total", "b_total", "natural") %in% names(h))) return(rep(NA_real_, nrow(h)))
+  margin <- if (side == "P") h$p_total - h$b_total else h$b_total - h$p_total
+  win_pay <- ifelse(margin >= 4, DRAGON_BONUS_PAY[as.character(pmin(pmax(margin, 4), 9))], -1)
+  ifelse(h$natural, ifelse(margin > 0, 1, ifelse(margin == 0, 0, -1)),
+         ifelse(margin > 0, win_pay, -1))
+}
+
 # Net result per 1 unit wagered on each bet, for every hand.
 settle <- function(h, game = c("standard", "ez")) {
   game <- match.arg(game)
@@ -189,7 +209,9 @@ settle <- function(h, game = c("standard", "ez")) {
     Banker  = ifelse(B, banker_win, ifelse(P, -1, 0)),
     Tie     = ifelse(T, 8, -1),
     Dragon7 = ifelse(h$dragon7, 40, -1),
-    Panda8  = ifelse(h$panda8, 25, -1)
+    Panda8  = ifelse(h$panda8, 25, -1),
+    DragonBonusP = unname(dragon_bonus(h, "P")),
+    DragonBonusB = unname(dragon_bonus(h, "B"))
   )
 }
 
@@ -226,6 +248,11 @@ exact_odds <- function(decks = 8) {
   pr <- function(x) sum(prob[x])
   probs <- c(Banker = pr(w == "B"), Player = pr(w == "P"), Tie = pr(w == "T"),
              Dragon7 = pr(d7), Panda8 = pr(p8))
+  db_ev <- function(margin) {   # Dragon Bonus expected value for one side
+    pay <- ifelse(nat, ifelse(margin > 0, 1, ifelse(margin == 0, 0, -1)),
+                  ifelse(margin >= 4, DRAGON_BONUS_PAY[as.character(pmin(pmax(margin, 4), 9))], -1))
+    sum(prob * pay)
+  }
   edge <- function(x) -x  # house edge = -EV
   ev <- c(
     Player_std  = probs["Player"] - probs["Banker"],
@@ -234,7 +261,9 @@ exact_odds <- function(decks = 8) {
     Banker_ez   = (probs["Banker"] - probs["Dragon7"]) - probs["Player"],
     Tie         = 8 * probs["Tie"] - (1 - probs["Tie"]),
     Dragon7     = 40 * probs["Dragon7"] - (1 - probs["Dragon7"]),
-    Panda8      = 25 * probs["Panda8"] - (1 - probs["Panda8"])
+    Panda8      = 25 * probs["Panda8"] - (1 - probs["Panda8"]),
+    DragonBonusP = db_ev(pf - bf),
+    DragonBonusB = db_ev(bf - pf)
   )
   names(ev) <- sub("\\..*", "", names(ev))
   list(prob = probs, house_edge = edge(ev))
@@ -243,11 +272,13 @@ exact_odds <- function(decks = 8) {
 # ---- Observed vs exact house edge -------------------------------------------
 house_edge <- function(h, game = c("standard", "ez"), decks = 8) {
   game <- match.arg(game)
-  s  <- settle(h, game)
+  # only the bets this game actually offers
+  s  <- settle(h, game)[c("Player", "Banker", "Tie", SIDE_BETS[[game]])]
   ex <- exact_odds(decks)$house_edge
   key <- c(Player = paste0("Player_", if (game == "standard") "std" else "ez"),
            Banker = paste0("Banker_", if (game == "standard") "std" else "ez"),
-           Tie = "Tie", Dragon7 = "Dragon7", Panda8 = "Panda8")
+           Tie = "Tie", Dragon7 = "Dragon7", Panda8 = "Panda8",
+           DragonBonusP = "DragonBonusP", DragonBonusB = "DragonBonusB")[names(s)]
   data.frame(
     bet          = names(s),
     sim_edge_pct = round(-colMeans(s) * 100, 3),

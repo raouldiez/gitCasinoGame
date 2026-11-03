@@ -80,6 +80,16 @@ big_road_html <- function(winner, rows = 6, min_cols = 20) {
 
 RESULT_TEXT <- c(P = "Player wins", B = "Banker wins", T = "Tie")
 
+# "Banker wins by 6", plus Natural / Dragon 7 / Panda 8 tags (the margin settles the Dragon Bonus)
+result_text <- function(h, k, specials = TRUE, game = "standard") {
+  m <- abs(h$p_total[k] - h$b_total[k])
+  txt <- if (h$winner[k] == "T") "Tie" else sprintf("%s by %d", RESULT_TEXT[[h$winner[k]]], m)
+  if (!specials) return(txt)
+  ez <- game == "ez"   # Dragon 7 / Panda 8 are only events at an EZ table
+  tag <- if (ez && h$dragon7[k]) "Dragon 7" else if (ez && h$panda8[k]) "Panda 8" else if (h$natural[k]) "Natural"
+  if (is.null(tag)) txt else paste(txt, "–", tag)
+}
+
 # ---- UI -----------------------------------------------------------------------
 css <- "
 .felt { background: radial-gradient(ellipse at center, #1f6b45 0%, #134a2f 100%);
@@ -174,8 +184,20 @@ ui <- bslib::page_navbar(
           bet_input("bet_P", "Player", "1:1"),
           bet_input("bet_B", "Banker", "0.95:1 / EZ 1:1"),
           bet_input("bet_T", "Tie", "8:1"),
-          bet_input("bet_D", "Dragon 7", "40:1"),
-          bet_input("bet_N", "Panda 8", "25:1")),
+          # Dragon Bonus is offered in both games; Dragon 7 and Panda 8 only in EZ Baccarat
+          bet_input("bet_DP", "Dragon Bonus Player", "1:1 to 30:1"),
+          bet_input("bet_DB", "Dragon Bonus Banker", "1:1 to 30:1"),
+          conditionalPanel("input.p_game == 'ez'",
+            bet_input("bet_D", "Dragon 7", "40:1"),
+            bet_input("bet_N", "Panda 8", "25:1"))),
+        conditionalPanel("!input.a_on", tags$details(class = "small mb-2",
+          tags$summary("Dragon Bonus pay table"),
+          tags$table(class = "table table-sm mb-0", tags$tbody(
+            lapply(list(c("Natural win", "1 to 1"), c("Natural tie", "Push"),
+                        c("Win by 9", "30 to 1"), c("Win by 8", "10 to 1"), c("Win by 7", "6 to 1"),
+                        c("Win by 6", "4 to 1"), c("Win by 5", "2 to 1"), c("Win by 4", "1 to 1"),
+                        c("Win by 0–3, or any other result", "Loses")),
+                   function(r) tags$tr(tags$td(r[1]), tags$td(r[2]))))))),
         conditionalPanel("input.a_on",
           selectInput("a_system", "System", SYSTEMS),
           uiOutput("a_help"),
@@ -229,7 +251,7 @@ ui <- bslib::page_navbar(
       ),
       uiOutput("s_summary"),
       bslib::card(bslib::card_header("House edge: simulated vs exact (%)"), tableOutput("s_edge")),
-      bslib::card(bslib::card_header("Betting systems"), tableOutput("s_strat"),
+      bslib::card(bslib::card_header("Betting systems"), tableOutput("s_strat"), uiOutput("s_skipnote"),
                   p(class = "small text-muted", "Return = net result ÷ total amount wagered. ",
                     "Worst drawdown = largest drop from a previous high.")),
       bslib::card(bslib::card_header("Report"), plotOutput("s_plot", height = "720px")),
@@ -304,7 +326,12 @@ server <- function(input, output, session) {
                ignoreInit = TRUE)
   observeEvent(input$p_new, { new_play_shoe(); play$log <- NULL })
 
-  BET_NAME <- c(P = "Player", B = "Banker", T = "Tie", D = "Dragon 7", N = "Panda 8")
+  BET_NAME <- c(P = "Player", B = "Banker", T = "Tie", D = "Dragon 7", N = "Panda 8",
+                DP = "Dragon Bonus Player", DB = "Dragon Bonus Banker")
+  PAY_COL  <- c(P = "Player", B = "Banker", T = "Tie", D = "Dragon7", N = "Panda8",
+                DP = "DragonBonusP", DB = "DragonBonusB")
+  # Dragon 7 is an EZ Baccarat bet, so a Dragon count system sits out at a standard table
+  dragon_unavailable <- function(side) identical(side, "D") && identical(input$p_game, "standard")
   stop_autoplay <- function(msg = NULL) { auto$remaining <- 0; if (!is.null(msg)) auto$msg <- msg }
 
   do_deal <- function() {
@@ -317,14 +344,15 @@ server <- function(input, output, session) {
     k <- play$k + 1
     winners <- play$h$winner[seq_len(k - 1)]
     last <- tail(c(NA_character_, winners[winners != "T"]), 1)
+    bets <- c(P = 0, B = 0, T = 0, D = 0, N = 0, DP = 0, DB = 0)
     if (isTRUE(input$a_on)) {
-      bets <- c(P = 0, B = 0, T = 0, D = 0, N = 0)
       if (!auto$stopped) {
         d <- system_decide(auto_cfg(), auto$prog, last, play$h$tc[k])
-        if (d$stake > 0) bets[[d$side]] <- d$stake
+        if (d$stake > 0 && !dragon_unavailable(d$side)) bets[[d$side]] <- d$stake
       }
     } else {
-      bets <- c(P = input$bet_P, B = input$bet_B, T = input$bet_T, D = input$bet_D, N = input$bet_N)
+      offered <- c("P", "B", "T", "DP", "DB", if (input$p_game == "ez") c("D", "N"))
+      for (b in offered) bets[[b]] <- input[[paste0("bet_", b)]] %||% 0
       bets[is.na(bets) | bets < 0] <- 0
     }
     if (sum(bets) > play$bank) {
@@ -332,7 +360,7 @@ server <- function(input, output, session) {
       showNotification("Total bets exceed your bankroll.", type = "error"); return(FALSE)
     }
     play$k <- k
-    pay <- unlist(settle(play$h[k, ], input$p_game))[c("Player", "Banker", "Tie", "Dragon7", "Panda8")]
+    pay <- unlist(settle(play$h[k, ], input$p_game))[PAY_COL[names(bets)]]
     names(pay) <- names(bets)
     net <- sum(bets * pay)
     play$bank <- play$bank + net
@@ -358,8 +386,7 @@ server <- function(input, output, session) {
       Hand = as.integer(k),
       Player = paste(card_label(hc$player), collapse = " "), P = as.integer(play$h$p_total[k]),
       Banker = paste(card_label(hc$banker), collapse = " "), B = as.integer(play$h$b_total[k]),
-      Result = paste0(RESULT_TEXT[[play$h$winner[k]]],
-                      if (play$h$dragon7[k]) " – Dragon 7" else if (play$h$panda8[k]) " – Panda 8" else ""),
+      Result = result_text(play$h, k, game = input$p_game),
       `Bet on` = if (length(placed)) paste(BET_NAME[names(placed)], placed, collapse = ", ") else "–",
       Net = sprintf("%+.2f", net), check.names = FALSE), play$log)
     TRUE
@@ -387,7 +414,10 @@ server <- function(input, output, session) {
            else if (k > nrow(play$h)) "Shoe finished"
            else {
              d <- system_decide(auto_cfg(), auto$prog, last, play$h$tc[k])
-             if (d$stake > 0) sprintf("Next bet: %s %s", BET_NAME[[d$side]], format(d$stake)) else "Next hand: sitting out"
+             if (dragon_unavailable(d$side) || (input$a_system == "Dragon count" && input$p_game == "standard"))
+               "Sitting out: Dragon 7 is only offered in EZ Baccarat"
+             else if (d$stake > 0) sprintf("Next bet: %s %s", BET_NAME[[d$side]], format(d$stake))
+             else "Next hand: sitting out"
            }
     div(class = "count-box mb-2 d-flex gap-3 flex-wrap",
         strong(input$a_system), span(nxt),
@@ -415,8 +445,9 @@ server <- function(input, output, session) {
   output$p_banner <- renderUI({
     k <- play$k; if (k == 0) return(burn_html(play$shoe, show_tag = isTRUE(input$p_showcount)))
     h <- play$h
-    sp <- if (h$dragon7[k]) "DRAGON 7" else if (h$panda8[k]) "PANDA 8" else if (h$natural[k]) "Natural"
-    div(class = "banner", RESULT_TEXT[[h$winner[k]]], if (!is.null(sp)) span(class = "special", sp),
+    ez <- input$p_game == "ez"
+    sp <- if (ez && h$dragon7[k]) "DRAGON 7" else if (ez && h$panda8[k]) "PANDA 8" else if (h$natural[k]) "Natural"
+    div(class = "banner", result_text(h, k, specials = FALSE), if (!is.null(sp)) span(class = "special", sp),
         if (play$last$bet > 0) div(style = "font-size: 1.1rem; font-weight: 500",
           if (play$last$net == 0) "Push: your bet is returned"
           else sprintf("You %s %.2f", if (play$last$net > 0) "won" else "lost", abs(play$last$net))),
@@ -445,6 +476,10 @@ server <- function(input, output, session) {
         base = max(1, input$s_base %||% 10), table_max = max(1, input$s_max %||% 1000),
         max_steps = max(1, input$s_steps %||% 6), stop_loss = input$s_sl %||% 0,
         take_profit = input$s_tp %||% 0, threshold = input$s_thresh)
+      # Dragon 7 is EZ-only, so the Dragon count has nothing to bet at a standard table
+      skipped <- input$s_game == "standard" && "Dragon count" %in% names(systems)
+      if (skipped) systems[["Dragon count"]] <- NULL
+      validate(need(length(systems) > 0, "Dragon count needs EZ Baccarat: pick another system or switch the game to EZ."))
       names(systems)[names(systems) == "Dragon count"] <- sprintf("Dragon count (TC ≥ %g)", input$s_thresh)
       runs <- list()
       for (nm in names(systems)) {   # one at a time so the progress bar moves
@@ -455,7 +490,7 @@ server <- function(input, output, session) {
       attr(cs, "runs") <- runs
       incProgress(0.05, message = "Computing exact odds...")
       edge <- house_edge(h, input$s_game, decks = input$s_decks)
-      list(h = h, cs = cs, edge = edge, game = input$s_game)
+      list(h = h, cs = cs, edge = edge, game = input$s_game, skipped = skipped)
     })
   })
   output$s_summary <- renderUI({
@@ -468,8 +503,12 @@ server <- function(input, output, session) {
       100 * tb[["B"]] / nrow(s$h), 100 * tb[["P"]] / nrow(s$h), 100 * tb[["T"]] / nrow(s$h),
       100 * mean(s$h$dragon7), 100 * mean(s$h$panda8)))
   })
-  output$s_edge <- renderTable(setNames(sim()$edge, c("Bet", "Simulated", "± 95% CI", "Exact")),
+  output$s_edge <- renderTable(setNames(transform(sim()$edge, bet = c(Player = "Player", Banker = "Banker",
+      Tie = "Tie", Dragon7 = "Dragon 7", Panda8 = "Panda 8", DragonBonusP = "Dragon Bonus Player",
+      DragonBonusB = "Dragon Bonus Banker")[bet]), c("Bet", "Simulated", "± 95% CI", "Exact")),
                                digits = 3, striped = TRUE)
+  output$s_skipnote <- renderUI(if (isTRUE(sim()$skipped)) p(class = "small text-warning",
+    "Dragon count was left out: the Dragon 7 bet is only offered in EZ Baccarat. Switch the game to EZ to include it."))
   output$s_strat <- renderTable({
     cs <- sim()$cs
     data.frame(System = rownames(cs), `Hands bet` = format(cs$hands_bet, big.mark = ","),

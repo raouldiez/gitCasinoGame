@@ -13,6 +13,20 @@ Both interfaces have the same three tabs:
 * **Simulate**: set shoes, decks, cut card, game and seed, then compare simulated vs exact
   house edge, betting systems, and Dragon 7 return by true count.
 
+### Tables and side bets
+
+| | Standard (5% commission) | EZ Baccarat (no commission) |
+|---|---|---|
+| Player / Banker / Tie | ✓ | ✓ (Banker pushes on a Dragon 7) |
+| Dragon Bonus, Player or Banker side | ✓ | ✓ |
+| Dragon 7 (40 to 1), Panda 8 (25 to 1) | | ✓ |
+
+**Dragon Bonus pay table:** natural win 1 to 1; natural tie push; non-natural win by 9: 30 to 1,
+by 8: 10 to 1, by 7: 6 to 1, by 6: 4 to 1, by 5: 2 to 1, by 4: 1 to 1. A win by 0–3 points or a
+non-natural tie loses. Exact 8-deck house edge: **2.65% on the Player side and 9.37% on the Banker side**
+(`exact_odds()`, which matches the published figures for 4, 6 and 8 decks). Results show the winning
+margin ("Banker wins by 6") because the margin settles the bet.
+
 ### Betting systems
 
 Every system is a choice of **side** (Banker, Player, opposite of the last result, or same as the
