@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baccarat Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* One visual world: a baccarat pit. Deep felt, ivory cards, brass trim; the felt is the stage,
+   the panels around it are the dealer's rail. Single theme by choice. */
+:root {
+  --felt: #14402c;
+  --felt-hi: #1d5a3e;
+  --rail: #0d1f17;
+  --panel: #12291f;
+  --ivory: #f5efe1;
+  --brass: #c9a24a;
+  --ink: #e9e4d6;
+  --muted: #9fb0a5;
+  --line: #2a4a3b;
+  --banker: #d2453a;
+  --player: #3d7fd9;
+  --tie: #3fae6a;
+  --good: #64d18f;
+  --bad: #f07a6e;
+  --display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--rail); color: var(--ink); font: 15px/1.5 var(--body); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+header { display: flex; align-items: center; gap: 24px; padding: 14px 20px; border-bottom: 1px solid var(--line);
+         flex-wrap: wrap; }
+header h1 { font: 600 1.7rem/1 var(--display); margin: 0; color: var(--ivory); letter-spacing: .02em; }
+header h1 span { color: var(--brass); }
+nav { display: flex; gap: 4px; }
+nav a { color: var(--muted); text-decoration: none; padding: 6px 14px; border-radius: 999px; font-weight: 500; }
+nav a[aria-current="page"] { background: var(--felt-hi); color: var(--ivory); }
+nav a:hover { color: var(--ivory); }
+main { max-width: 1180px; margin: 0 auto; padding: 18px 16px 48px; display: grid; gap: 16px; }
+section[hidden] { display: none !important; }
+.view { display: grid; gap: 16px; }
+
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.tile .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.tile .v { font: 600 1.35rem/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+
+/* Felt */
+.felt { background: radial-gradient(ellipse 80% 90% at 50% 30%, var(--felt-hi), var(--felt) 70%);
+        border: 3px solid #3b2e14; box-shadow: inset 0 0 0 2px var(--brass), 0 10px 30px rgba(0,0,0,.4);
+        border-radius: 28px; padding: 20px 20px 18px; display: grid; gap: 14px; }
+.hands { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.side { text-align: center; display: grid; gap: 8px; justify-items: center; }
+.side h2 { margin: 0; font: 600 1.25rem/1 var(--display); letter-spacing: .3em; }
+.side.P h2 { color: #9cc2f5; } .side.B h2 { color: #f2a59d; }
+.cards { display: flex; gap: 8px; min-height: 112px; align-items: center; justify-content: center; }
+.total { font: 700 2.6rem/1 var(--display); color: var(--ivory); min-height: 2.6rem; }
+.card { width: 74px; height: 106px; border-radius: 9px; background: var(--ivory); color: #1d1d1d;
+        box-shadow: 0 3px 8px rgba(0,0,0,.45); position: relative; display: grid; place-items: center;
+        font-family: var(--display); }
+.card.red { color: #b3261e; }
+.card .r { position: absolute; top: 5px; left: 8px; font-weight: 700; font-size: 1.25rem; line-height: 1; }
+.card .s { font-size: 2.3rem; line-height: 1; }
+.card .r2 { position: absolute; bottom: 5px; right: 8px; font-weight: 700; font-size: 1.25rem; line-height: 1; transform: rotate(180deg); }
+/* third card: dropped lower and set apart, as dealers lay it beside the hand */
+.card.third { translate: 0 14px; margin-left: 8px; box-shadow: 0 0 0 2px var(--brass), 0 3px 8px rgba(0,0,0,.45); }
+.card .tag { position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%); font: 600 .8rem var(--mono); }
+.card .tag.p { color: var(--good); } .card .tag.n { color: var(--bad); } .card .tag.z { color: var(--muted); }
+.deal-in { animation: dealin .22s ease-out both; }
+@keyframes dealin { from { opacity: 0; translate: 0 -18px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .deal-in { animation: none; } }
+.empty { color: rgba(245,239,225,.55); font-style: italic; }
+.banner { text-align: center; min-height: 2.6rem; font: 600 1.6rem/1.3 var(--display); color: var(--ivory); }
+.banner .sp { color: var(--brass); margin-left: .4em; letter-spacing: .08em; }
+.banner small { display: block; font: 500 .95rem var(--body); color: var(--ink); }
+
+.spots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.spot { border: 1.5px solid rgba(201,162,74,.7); background: rgba(0,0,0,.12); border-radius: 14px; padding: 10px 6px;
+        text-align: center; cursor: pointer; display: grid; gap: 2px; transition: background .15s; }
+.spot:hover { background: rgba(0,0,0,.24); }
+.spot b { font: 600 1.05rem/1.1 var(--display); letter-spacing: .12em; }
+.spot .pay { font-size: .75rem; color: var(--muted); }
+.spot .amt { font: 600 1rem var(--mono); min-height: 1.5rem; color: var(--brass); }
+.spot.P b { color: #9cc2f5; } .spot.B b { color: #f2a59d; } .spot.T b { color: #9fe0b5; }
+.spot.win { box-shadow: 0 0 0 2px var(--brass), 0 0 18px rgba(201,162,74,.5); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.chips { display: flex; gap: 6px; }
+.chip { width: 46px; height: 46px; border-radius: 50%; border: 3px dashed rgba(255,255,255,.7); cursor: pointer;
+        font: 600 .85rem var(--mono); color: #fff; display: grid; place-items: center; }
+.chip[data-v="5"] { background: #b3261e; } .chip[data-v="25"] { background: #2e7d4f; }
+.chip[data-v="100"] { background: #1f1f1f; } .chip[data-v="500"] { background: #6b3fa0; }
+.chip[aria-pressed="true"] { outline: 3px solid var(--brass); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 9px 16px; cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--brass); }
+.btn.primary { background: var(--brass); color: #21190a; border-color: var(--brass); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 8px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--felt-hi); color: var(--ivory); }
+label.tog { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--ink); }
+.spacer { flex: 1; }
+
+.countbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 10px; padding: 8px 14px; }
+.hot { background: var(--brass); color: #21190a; border-radius: 6px; padding: 2px 9px; font-weight: 600; font-size: .85rem; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.panel h3 { margin: 0 0 10px; font: 600 1.15rem/1.2 var(--display); color: var(--ivory); letter-spacing: .03em; text-wrap: balance; }
+.two { display: grid; grid-template-columns: 2fr 3fr; gap: 16px; }
+.road-wrap { overflow-x: auto; }
+.road { display: grid; grid-auto-flow: column; grid-template-rows: repeat(6, 22px); grid-auto-columns: 22px; gap: 0;
+        border-top: 1px solid var(--line); border-left: 1px solid var(--line); width: max-content; }
+.road > div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: grid; place-items: center; position: relative; }
+.bead { width: 18px; height: 18px; border-radius: 50%; color: #fff; font: 600 10px/18px var(--mono); text-align: center; }
+.bead.B { background: var(--banker); } .bead.P { background: var(--player); } .bead.T { background: var(--tie); }
+.ring { width: 15px; height: 15px; border-radius: 50%; border: 3px solid; }
+.ring.B { border-color: var(--banker); } .ring.P { border-color: var(--player); }
+.tie-n { position: absolute; top: -1px; right: 1px; font: 600 9px var(--mono); color: var(--tie); }
+
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.tbl { overflow-x: auto; }
+.cl { font-family: var(--mono); } .cl .red { color: #f2a59d; }
+
+/* Simulate */
+.simgrid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+.form { display: grid; gap: 12px; }
+.form label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.form input[type=number], .form select { background: var(--rail); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: var(--ink); }
+.form input[type=range] { accent-color: var(--brass); }
+.form .row { display: flex; justify-content: space-between; color: var(--ink); }
+.results { display: grid; gap: 16px; min-width: 0; }
+canvas { width: 100%; display: block; }
+.note { color: var(--muted); font-size: .85rem; margin: 6px 0 0; max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; margin-top: 8px; }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+
+/* Trainer */
+.quiz { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.quiz label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.quiz input { width: 130px; background: var(--rail); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.prompt { background: rgba(201,162,74,.15); border: 1px solid var(--brass); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+.fb { margin-top: 10px; display: grid; gap: 4px; font-weight: 500; }
+.legend-tags { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: .9rem; }
+
+@media (max-width: 820px) {
+  .two, .simgrid { grid-template-columns: 1fr; }
+  .spots { grid-template-columns: repeat(3, 1fr); }
+  .card { width: 54px; height: 78px; } .card .s { font-size: 1.6rem; } .card .r, .card .r2 { font-size: 1rem; }
+  .cards { min-height: 84px; } .card.third { margin-left: 4px; }
+  .total { font-size: 2rem; }
+}
+@media (max-width: 480px) {
+  .felt { padding: 16px 10px; } .hands { gap: 6px; }
+  .cards { gap: 4px; }
+  .card { width: 42px; height: 62px; border-radius: 6px; } .card .s { font-size: 1.25rem; }
+  .card .r, .card .r2 { font-size: .8rem; } .card .r { top: 3px; left: 4px; } .card .r2 { bottom: 3px; right: 4px; }
+  .card.third { margin-left: 2px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Baccarat <span>Table</span></h1>
+  <nav aria-label="Views">
+    <a href="#play" data-view="play">Play</a>
+    <a href="#simulate" data-view="simulate">Simulate</a>
+    <a href="#trainer" data-view="trainer">Count trainer</a>
+  </nav>
+</header>
+
+<main>
+<!-- ============ PLAY ============ -->
+<section id="v-play" class="view">
+  <div class="strip">
+    <div class="tile"><div class="k">Bankroll</div><div class="v" id="pBank">1,000.00</div></div>
+    <div class="tile"><div class="k">Session net</div><div class="v" id="pNet">+0.00</div></div>
+    <div class="tile"><div class="k">Hand</div><div class="v" id="pHand">0 / 0</div></div>
+    <div class="tile"><div class="k">Cards left</div><div class="v" id="pLeft">416</div></div>
+  </div>
+
+  <div class="felt">
+    <div class="hands">
+      <div class="side P"><h2>PLAYER</h2><div class="cards" id="pP"></div><div class="total" id="pPT"></div></div>
+      <div class="side B"><h2>BANKER</h2><div class="cards" id="pB"></div><div class="total" id="pBT"></div></div>
+    </div>
+    <div class="banner" id="pBanner"></div>
+    <div class="spots" id="spots">
+      <button class="spot P" data-bet="P"><b>PLAYER</b><span class="pay">pays 1 to 1</span><span class="amt"></span></button>
+      <button class="spot T" data-bet="T"><b>TIE</b><span class="pay">pays 8 to 1</span><span class="amt"></span></button>
+      <button class="spot B" data-bet="B"><b>BANKER</b><span class="pay" id="bankerPay">pays 0.95 to 1</span><span class="amt"></span></button>
+      <button class="spot" data-bet="D"><b>DRAGON 7</b><span class="pay">pays 40 to 1</span><span class="amt"></span></button>
+      <button class="spot" data-bet="N"><b>PANDA 8</b><span class="pay">pays 25 to 1</span><span class="amt"></span></button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="chips" role="group" aria-label="Chip value">
+      <button class="chip" data-v="5" aria-pressed="false">5</button>
+      <button class="chip" data-v="25" aria-pressed="true">25</button>
+      <button class="chip" data-v="100" aria-pressed="false">100</button>
+      <button class="chip" data-v="500" aria-pressed="false">500</button>
+    </div>
+    <button class="btn primary" id="deal">Deal</button>
+    <button class="btn" id="clear">Clear bets</button>
+    <div class="seg" role="group" aria-label="Game">
+      <button data-game="standard" aria-pressed="true">Standard</button>
+      <button data-game="ez" aria-pressed="false">EZ Baccarat</button>
+    </div>
+    <label class="tog"><input type="checkbox" id="pShowCount"> Show Dragon count</label>
+    <span class="spacer"></span>
+    <button class="btn" id="newShoe">New shoe</button>
+    <button class="btn" id="resetBank">Reset bankroll</button>
+  </div>
+  <p class="note" style="margin-top:-6px">Click a betting spot to add the selected chip. Bets stay in place for the next hand until you clear them.</p>
+
+  <div class="countbar" id="pCount" hidden></div>
+
+  <div class="two">
+    <div class="panel"><h3>Bead plate</h3><div class="road-wrap"><div class="road" id="bead"></div></div></div>
+    <div class="panel"><h3>Big road</h3><div class="road-wrap"><div class="road" id="big"></div></div></div>
+  </div>
+  <div class="panel"><h3>Recent hands</h3><div class="tbl"><table id="pHist"></table></div></div>
+</section>
+
+<!-- ============ SIMULATE ============ -->
+<section id="v-simulate" class="view" hidden>
+  <div class="simgrid">
+    <div class="panel form">
+      <h3>Settings</h3>
+      <label>Shoes to simulate <span class="row"><input type="range" id="sShoes" min="500" max="50000" step="500" value="5000"><span class="num" id="sShoesV">5,000</span></span></label>
+      <label>Decks <span class="row"><input type="range" id="sDecks" min="1" max="8" value="8"><span class="num" id="sDecksV">8</span></span></label>
+      <label>Cards behind the cut card <span class="row"><input type="range" id="sCut" min="6" max="60" value="14"><span class="num" id="sCutV">14</span></span></label>
+      <label>Game <select id="sGame"><option value="standard">Standard (5% commission)</option><option value="ez">EZ Baccarat</option></select></label>
+      <label>Dragon bet when true count is at least <span class="row"><input type="range" id="sThr" min="0" max="10" step="0.5" value="4"><span class="num" id="sThrV">4</span></span></label>
+      <label>Random seed (blank for random) <input type="number" id="sSeed" placeholder="e.g. 42"></label>
+      <button class="btn primary" id="sRun">Run simulation</button>
+      <p class="note" id="sStatus"></p>
+    </div>
+    <div class="results">
+      <div class="strip" id="sTiles"></div>
+      <div class="panel"><h3>House edge: simulated vs exact</h3><div class="tbl"><table id="sEdge"></table></div>
+        <p class="note">Exact values come from enumerating every possible deal off the top of a fresh shoe. Simulated values should land within the ±95% range.</p></div>
+      <div class="panel"><h3>Betting systems vs the house</h3><canvas id="cStrat" height="300"></canvas><div class="legend" id="lStrat"></div>
+        <div class="tbl" style="margin-top:10px"><table id="sStrat"></table></div></div>
+      <div class="two">
+        <div class="panel"><h3>Dragon 7 return by true count</h3><canvas id="cDragon" height="260"></canvas>
+          <p class="note">Return per unit bet on the Dragon, grouped by the true count before the hand. Bars above zero mean the bet favours the player.</p></div>
+        <div class="panel"><h3>Streak lengths vs pure chance</h3><canvas id="cStreak" height="260"></canvas>
+          <p class="note">Bars are simulated streaks (ties ignored); dots are what independent hands predict. They match, so patterns carry no information.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRAINER ============ -->
+<section id="v-trainer" class="view" hidden>
+  <div class="strip">
+    <div class="tile"><div class="k">Hand</div><div class="v" id="tHand">0 / 0</div></div>
+    <div class="tile"><div class="k">Cards left</div><div class="v" id="tLeft">0</div></div>
+    <div class="tile"><div class="k">Decks left</div><div class="v" id="tDecks">0</div></div>
+    <div class="tile"><div class="k">Score</div><div class="v" id="tScore">–</div></div>
+  </div>
+  <div class="panel">
+    <div class="legend-tags"><span><b>4 5 6 7</b> = −1</span><span><b>8 9</b> = +2</span><span><b>A 2 3 10 J Q K</b> = 0</span>
+      <span style="color:var(--muted)">True count = running count ÷ decks left. Bet the Dragon at +4 or higher.</span></div>
+  </div>
+  <div class="felt">
+    <div class="hands">
+      <div class="side P"><h2>PLAYER</h2><div class="cards" id="tP"></div></div>
+      <div class="side B"><h2>BANKER</h2><div class="cards" id="tB"></div></div>
+    </div>
+    <div style="height:18px"></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="tNext">Next hand</button>
+    <label class="tog"><input type="checkbox" id="tAuto"> Auto-deal every</label>
+    <select id="tSpeed" class="btn" aria-label="Seconds per hand"><option value="1">1 s</option><option value="2" selected>2 s</option><option value="3">3 s</option><option value="5">5 s</option></select>
+    <label class="tog">Quiz every <select id="tEvery" class="btn"><option value="0">never</option><option value="3">3 hands</option><option value="5" selected>5 hands</option><option value="10">10 hands</option></select></label>
+    <label class="tog"><input type="checkbox" id="tTags"> Show tags (practice)</label>
+    <span class="spacer"></span>
+    <button class="btn" id="tNew">New shoe</button>
+  </div>
+  <div class="panel">
+    <h3>Your count</h3>
+    <div class="prompt" id="tPrompt" hidden>Quiz time. What is the running count now?</div>
+    <form class="quiz" id="tForm">
+      <label>Running count <input type="number" id="tRC" step="1"></label>
+      <label>True count (optional) <input type="number" id="tTC" step="0.5"></label>
+      <button class="btn primary" type="submit">Check</button>
+      <button class="btn" type="button" id="tReveal">Reveal</button>
+    </form>
+    <div class="fb" id="tFb"></div>
+  </div>
+</section>
+</main>
+
+<script>
+// Baccarat engine — JavaScript port of baccarat.R (same rules, same Dragon count)
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const SUITS = ["♠","♥","♦","♣"];
+const VALUE = [1,2,3,4,5,6,7,8,9,0,0,0,0];      // by rank index 0..12
+const BURN  = [1,2,3,4,5,6,7,8,9,10,10,10,10];
+const DRAGON_TAGS = [0,0,0,0,-1,-1,-1,-1,2,2]; // by point value 0..9
+
+const rankOf = id => id % 13;
+const suitOf = id => Math.floor(id / 13) % 4;
+const valOf  = id => VALUE[id % 13];
+const tagOf  = id => DRAGON_TAGS[valOf(id)];
+const cardLabel = id => RANKS[rankOf(id)] + SUITS[suitOf(id)];
+
+// BANKER_DRAW[b][k]: k = player's third-card value 0..9, or 10 when Player stood
+const BANKER_DRAW = Array.from({length: 10}, (_, b) => Array.from({length: 11}, (_, k) => {
+  if (k === 10) return b <= 5;
+  const p3 = k;
+  if (b <= 2) return true;
+  if (b === 3) return p3 !== 8;
+  if (b === 4) return p3 >= 2 && p3 <= 7;
+  if (b === 5) return p3 >= 4 && p3 <= 7;
+  if (b === 6) return p3 === 6 || p3 === 7;
+  return false;
+}));
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+function newShoe(decks = 8, rng = Math.random) {
+  const s = new Array(52 * decks);
+  for (let i = 0; i < s.length; i++) s[i] = i % 52;
+  for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; }
+  return s;
+}
+
+// Deal a whole shoe. Burn: first card face up (counted), then its face value face down.
+// When the cut card comes out, one more hand is dealt.
+function playShoe(shoe, cut = 14) {
+  const N = shoe.length, hands = [];
+  let rc = tagOf(shoe[0]);
+  let pos = 1 + BURN[rankOf(shoe[0])];
+  let cutSeen = false;
+  while (N - pos >= 6) {
+    const left = N - pos, i = pos;
+    const v = k => valOf(shoe[i + k]);
+    let p = (v(0) + v(2)) % 10, b = (v(1) + v(3)) % 10;
+    let used = 4, pn = 2, bn = 2, p3 = null;
+    const nat = p >= 8 || b >= 8;
+    if (!nat) {
+      let col = 10;
+      if (p <= 5) { p3 = v(used); used++; pn = 3; p = (p + p3) % 10; col = p3; }
+      if (BANKER_DRAW[b][col]) { b = (b + v(used)) % 10; used++; bn = 3; }
+    }
+    const rcBefore = rc;
+    for (let k = 0; k < used; k++) rc += tagOf(shoe[i + k]);
+    const w = p > b ? "P" : b > p ? "B" : "T";
+    hands.push({ p, b, pn, bn, p3, w, nat,
+      d7: w === "B" && bn === 3 && b === 7, p8: w === "P" && pn === 3 && p === 8,
+      first: i, used, left, rc: rcBefore, tc: rcBefore / (left / 52), rcAfter: rc, leftAfter: left - used });
+    pos += used;
+    if (cutSeen) break;
+    if (N - pos <= cut) cutSeen = true;
+  }
+  return hands;
+}
+
+function handCards(shoe, h) {
+  const c = k => shoe[h.first + k];
+  return { player: [c(0), c(2)].concat(h.pn === 3 ? [c(4)] : []),
+           banker: [c(1), c(3)].concat(h.bn === 3 ? [c(h.used - 1)] : []),
+           order: Array.from({length: h.used}, (_, k) => c(k)) };
+}
+
+// Net per 1 unit wagered
+function payout(h, bet, game) {
+  switch (bet) {
+    case "P": return h.w === "P" ? 1 : h.w === "B" ? -1 : 0;
+    case "B": return h.w === "B" ? (game === "ez" ? (h.d7 ? 0 : 1) : 0.95) : h.w === "P" ? -1 : 0;
+    case "T": return h.w === "T" ? 8 : -1;
+    case "D": return h.d7 ? 40 : -1;
+    case "N": return h.p8 ? 25 : -1;
+  }
+  return 0;
+}
+
+// Exact off-the-top odds by enumerating all 10^6 point-value sequences of 6 cards
+function exactOdds(decks = 8) {
+  const n = [16, 4, 4, 4, 4, 4, 4, 4, 4, 4].map(x => x * decks), N = n.reduce((a, b) => a + b);
+  let B = 0, P = 0, T = 0, D7 = 0, P8 = 0;
+  const g = [0, 0, 0, 0, 0, 0];
+  const rec = (k, prob, used) => {
+    if (k === 6) {
+      let p = (g[0] + g[2]) % 10, b = (g[1] + g[3]) % 10, pd = false, bd = false;
+      if (!(p >= 8 || b >= 8)) {
+        let col = 10, next = 4;
+        if (p <= 5) { pd = true; col = g[4]; p = (p + g[4]) % 10; next = 5; }
+        if (BANKER_DRAW[b][col]) { bd = true; b = (b + g[next]) % 10; }
+      }
+      if (p > b) { P += prob; if (pd && p === 8) P8 += prob; }
+      else if (b > p) { B += prob; if (bd && b === 7) D7 += prob; }
+      else T += prob;
+      return;
+    }
+    for (let v = 0; v < 10; v++) {
+      const left = n[v] - used[v]; if (left <= 0) continue;
+      g[k] = v; used[v]++; rec(k + 1, prob * left / (N - k), used); used[v]--;
+    }
+  };
+  rec(0, 1, new Array(10).fill(0));
+  return { prob: { B, P, T, D7, P8 }, edge: {
+    "Player": B - P, "Banker (5% comm.)": P - 0.95 * B, "Banker (EZ)": P - (B - D7),
+    "Tie": 1 - 9 * T, "Dragon 7": 1 - 41 * D7, "Panda 8": 1 - 26 * P8 } };
+}
+
+// Strategies: (state) => {bet: "P"|"B"|"T"|"D"|null, units}
+const STRATEGIES = {
+  "Flat Banker":            s => ({ bet: "B", units: 1 }),
+  "Flat Player":            s => ({ bet: "P", units: 1 }),
+  "Chop progression (2016)": s => (s.last === null || s.streak > 3) ? { bet: null } :
+                                   { bet: s.last === "B" ? "P" : "B", units: s.streak },
+  "Follow the streak":      s => ({ bet: s.last ?? "B", units: 1 }),
+  "Martingale Banker":      s => ({ bet: "B", units: 2 ** (s.losses % 6) }),
+  "Dragon count":           (s, thr) => s.tc >= thr ? { bet: "D", units: 1 } : { bet: null },
+};
+
+function runStrategy(shoes, fn, game, thr) {
+  let net = 0, wagered = 0, bets = 0, peak = 0, worst = 0;
+  const curve = [];
+  for (const hands of shoes) {
+    let last = null, streak = 0, losses = 0;
+    for (const h of hands) {
+      const d = fn({ last, streak, losses, tc: h.tc }, thr);
+      if (d.bet && d.units > 0) {
+        const r = payout(h, d.bet, game) * d.units;
+        net += r; wagered += d.units; bets++;
+        if (r < 0) losses++; else if (r > 0) losses = 0;
+        peak = Math.max(peak, net); worst = Math.min(worst, net - peak);
+      }
+      curve.push(net);
+      if (h.w !== "T") { streak = (h.w === last) ? streak + 1 : 1; last = h.w; }
+    }
+  }
+  return { net, wagered, bets, ret: wagered ? 100 * net / wagered : 0, worst, curve };
+}
+
+function dragonByCount(shoes, edges = [-Infinity, -2, 0, 2, 4, 6, Infinity]) {
+  const rows = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, sum: 0, sq: 0 }));
+  for (const hands of shoes) for (const h of hands) {
+    const r = h.d7 ? 40 : -1;
+    const row = rows.find(x => h.tc >= x.lo && h.tc < x.hi);
+    row.n++; row.sum += r; row.sq += r * r;
+  }
+  return rows.map(x => {
+    const m = x.n ? x.sum / x.n : 0, sd = x.n > 1 ? Math.sqrt((x.sq - x.n * m * m) / (x.n - 1)) : 0;
+    return { ...x, ev: 100 * m, ci: x.n ? 196 * sd / Math.sqrt(x.n) : 0 };
+  });
+}
+
+function streakLengths(shoes) {
+  const out = [];
+  for (const hands of shoes) {
+    let last = null, len = 0;
+    for (const h of hands) { if (h.w === "T") continue;
+      if (h.w === last) len++; else { if (last) out.push(len); last = h.w; len = 1; } }
+    if (last) out.push(len);
+  }
+  return out;
+}
+
+// Big Road: streaks go down a column; dragon tail turns right; ties counted on previous cell
+function bigRoad(winners, rows = 6) {
+  const cells = [], occ = new Set();
+  let last = null, runCol = -1, col = -1, row = -1, pendingTies = 0;
+  for (const w of winners) {
+    if (w === "T") { if (cells.length) cells[cells.length - 1].ties++; else pendingTies++; continue; }
+    if (w === last) {
+      if (row + 1 < rows && !occ.has(col + "," + (row + 1))) row++; else col++;
+    } else { runCol++; col = runCol; row = 0; }
+    occ.add(col + "," + row);
+    cells.push({ col, row, w, ties: pendingTies }); pendingTies = 0; last = w;
+  }
+  return cells;
+}
+
+
+</script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 2) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const sgn = (x, d = 2) => (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const RESULT = { P: "Player wins", B: "Banker wins", T: "Tie" };
+const CSS = getComputedStyle(document.documentElement);
+const tok = n => CSS.getPropertyValue(n).trim();
+
+function cardEl(id, { third = false, tag = false, anim = false } = {}) {
+  const d = document.createElement("div");
+  const red = suitOf(id) === 1 || suitOf(id) === 2;
+  d.className = "card" + (red ? " red" : "") + (third ? " third" : "") + (anim ? " deal-in" : "");
+  const r = RANKS[rankOf(id)], s = SUITS[suitOf(id)];
+  d.innerHTML = `<span class="r">${r}</span><span class="s">${s}</span><span class="r2">${r}</span>`;
+  d.setAttribute("aria-label", r + s);
+  if (tag) { const t = tagOf(id); d.insertAdjacentHTML("beforeend",
+    `<span class="tag ${t > 0 ? "p" : t < 0 ? "n" : "z"}">${t > 0 ? "+" + t : t}</span>`); }
+  return d;
+}
+const labelHTML = ids => ids.map(id => { const red = suitOf(id) === 1 || suitOf(id) === 2;
+  return `<span class="${red ? "red" : ""}">${cardLabel(id)}</span>`; }).join(" ");
+
+function renderRoads(winners) {
+  const bead = $("bead"), big = $("big");
+  const cols = Math.max(14, Math.ceil(winners.length / 6) + 1);
+  bead.innerHTML = Array.from({ length: cols * 6 }, (_, i) =>
+    `<div>${i < winners.length ? `<span class="bead ${winners[i]}">${winners[i]}</span>` : ""}</div>`).join("");
+  const cells = bigRoad(winners);
+  const bcols = Math.max(24, (cells.length ? Math.max(...cells.map(c => c.col)) : 0) + 3);
+  const grid = Array.from({ length: bcols * 6 }, () => "");
+  for (const c of cells) grid[c.col * 6 + c.row] =
+    `<span class="ring ${c.w}"></span>${c.ties ? `<span class="tie-n">${c.ties}</span>` : ""}`;
+  big.innerHTML = grid.map(x => `<div>${x}</div>`).join("");
+  big.parentElement.scrollLeft = big.scrollWidth;
+  bead.parentElement.scrollLeft = bead.scrollWidth;
+}
+
+/* ================= PLAY ================= */
+const P = { shoe: null, hands: [], k: 0, bank: 1000, start: 1000, game: "standard", chip: 25,
+            bets: { P: 0, B: 25, T: 0, D: 0, N: 0 }, log: [], busy: false };
+function pNewShoe(preDeal = 0) {
+  P.shoe = newShoe(8); P.hands = playShoe(P.shoe); P.k = 0; P.log = [];
+  for (let i = 0; i < preDeal; i++) { P.k++; logHand(P.k - 1, 0, 0); }
+  showHand(P.k ? P.hands[P.k - 1] : null, false); pRender();
+  if (preDeal) $("pBanner").innerHTML = `<small>Shoe in progress: ${preDeal} hands already dealt. Place your bets.</small>`;
+}
+function logHand(i, bet, net) {
+  const h = P.hands[i], c = handCards(P.shoe, h);
+  P.log.unshift({ n: i + 1, pc: c.player, bc: c.banker, h, bet, net });
+}
+function showHand(h, anim, done) {
+  const pp = $("pP"), bb = $("pB");
+  pp.innerHTML = ""; bb.innerHTML = ""; $("pPT").textContent = ""; $("pBT").textContent = ""; $("pBanner").innerHTML = "";
+  document.querySelectorAll(".spot").forEach(s => s.classList.remove("win"));
+  if (!h) { pp.innerHTML = bb.innerHTML = `<span class="empty">Place your bets</span>`; done && done(); return; }
+  const c = handCards(P.shoe, h);
+  const seq = [[pp, c.player[0]], [bb, c.banker[0]], [pp, c.player[1]], [bb, c.banker[1]]];
+  if (h.pn === 3) seq.push([pp, c.player[2], true]);
+  if (h.bn === 3) seq.push([bb, c.banker[2], true]);
+  const step = anim && !reduced ? 260 : 0;
+  seq.forEach(([el, id, third], i) => setTimeout(() => el.appendChild(cardEl(id, { third, anim: step > 0 })), i * step));
+  setTimeout(() => {
+    $("pPT").textContent = h.p; $("pBT").textContent = h.b;
+    const sp = h.d7 ? "DRAGON 7" : h.p8 ? "PANDA 8" : h.nat ? "Natural" : "";
+    let extra = "";
+    if (anim && P.last) extra = P.last.bet > 0 ? `<small>You ${P.last.net >= 0 ? "won" : "lost"} ${fmt(Math.abs(P.last.net))}</small>` : "";
+    if (P.k === P.hands.length) extra += `<small>The cut card is out. That was the last hand of this shoe.</small>`;
+    $("pBanner").innerHTML = `${RESULT[h.w]}${sp ? `<span class="sp">${sp}</span>` : ""}${extra}`;
+    document.querySelectorAll(".spot").forEach(s => { const b = s.dataset.bet;
+      if ((b === h.w) || (b === "D" && h.d7) || (b === "N" && h.p8)) s.classList.add("win"); });
+    done && done();
+  }, seq.length * step + (step ? 120 : 0));
+}
+function pRender() {
+  $("pBank").textContent = fmt(P.bank);
+  const net = P.bank - P.start; $("pNet").textContent = sgn(net); $("pNet").className = "v " + (net >= 0 ? "pos" : "neg");
+  $("pHand").textContent = `${P.k} / ${P.hands.length}`;
+  const left = P.k ? P.hands[P.k - 1].leftAfter : P.hands[0].left;
+  $("pLeft").textContent = left;
+  document.querySelectorAll(".spot").forEach(s => { const v = P.bets[s.dataset.bet];
+    s.querySelector(".amt").textContent = v ? fmt(v, 0) : ""; });
+  $("bankerPay").textContent = P.game === "ez" ? "pays 1 to 1 · Dragon 7 pushes" : "pays 0.95 to 1";
+  renderRoads(P.hands.slice(0, P.k).map(h => h.w));
+  const cb = $("pCount");
+  cb.hidden = !$("pShowCount").checked;
+  if (!cb.hidden) {
+    const rc = P.k ? P.hands[P.k - 1].rcAfter : P.hands[0].rc, tc = rc / (left / 52);
+    cb.innerHTML = `<span>Running count <b class="num">${rc >= 0 ? "+" : ""}${rc}</b></span>
+      <span>True count <b class="num">${sgn(tc, 1)}</b></span>
+      ${tc >= 4 ? `<span class="hot">Dragon bet favourable</span>` : `<span style="color:var(--muted)">Dragon bet becomes favourable at +4</span>`}`;
+  }
+  $("pHist").innerHTML = `<tr><th>#</th><th>Player</th><th class="r">P</th><th>Banker</th><th class="r">B</th><th>Result</th><th class="r">Bet</th><th class="r">Net</th></tr>` +
+    P.log.slice(0, 10).map(r => `<tr><td class="r">${r.n}</td><td class="cl">${labelHTML(r.pc)}</td><td class="r">${r.h.p}</td>
+      <td class="cl">${labelHTML(r.bc)}</td><td class="r">${r.h.b}</td>
+      <td>${RESULT[r.h.w]}${r.h.d7 ? " · Dragon 7" : r.h.p8 ? " · Panda 8" : ""}</td>
+      <td class="r">${r.bet ? fmt(r.bet, 0) : "–"}</td><td class="r ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.bet ? sgn(r.net) : "–"}</td></tr>`).join("");
+  $("deal").disabled = P.busy;
+}
+function deal() {
+  if (P.busy) return;
+  if (P.k >= P.hands.length) { pNewShoe(); }
+  const total = Object.values(P.bets).reduce((a, b) => a + b, 0);
+  if (total > P.bank) { $("pBanner").innerHTML = `<small>Your bets (${fmt(total, 0)}) are more than your bankroll. Clear some bets or reset the bankroll.</small>`; return; }
+  const h = P.hands[P.k];
+  let net = 0; for (const b in P.bets) net += P.bets[b] * payout(h, b, P.game);
+  P.k++; P.bank += net; P.last = { bet: total, net }; logHand(P.k - 1, total, net);
+  P.busy = true; $("deal").disabled = true;
+  showHand(h, true, () => { P.busy = false; pRender(); });
+}
+document.querySelectorAll(".spot").forEach(s => s.addEventListener("click", () => { P.bets[s.dataset.bet] += P.chip; pRender(); }));
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+  P.chip = +c.dataset.v; document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === c)); }));
+document.querySelectorAll("[data-game]").forEach(b => b.addEventListener("click", () => {
+  P.game = b.dataset.game; document.querySelectorAll("[data-game]").forEach(x => x.setAttribute("aria-pressed", x === b)); pRender(); }));
+$("deal").onclick = deal;
+$("clear").onclick = () => { for (const b in P.bets) P.bets[b] = 0; pRender(); };
+$("newShoe").onclick = () => pNewShoe();
+$("resetBank").onclick = () => { P.bank = P.start = 1000; pRender(); };
+$("pShowCount").onchange = pRender;
+document.addEventListener("keydown", e => { if (e.key === " " && location.hash.replace("#", "") === "play" &&
+  !["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); deal(); } });
+
+/* ================= SIMULATE ================= */
+const PALETTE = ["#6fa8f0", "#f07a6e", "#9fe0b5", "#c5a3f0", "#e8b65a", "#f5efe1"];
+function setupCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.getAttribute("height");
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return { ctx, w, h };
+}
+function niceTicks(lo, hi, n = 5) {
+  const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
+  const ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) ticks.push(+t.toFixed(10));
+  return ticks;
+}
+function axes(ctx, w, h, m, y0, y1, fmtY) {
+  ctx.font = "11px " + tok("--mono"); ctx.fillStyle = tok("--muted"); ctx.strokeStyle = tok("--line"); ctx.lineWidth = 1;
+  const Y = v => m.t + (h - m.t - m.b) * (1 - (v - y0) / (y1 - y0));
+  for (const t of niceTicks(y0, y1)) { ctx.beginPath(); ctx.moveTo(m.l, Y(t)); ctx.lineTo(w - m.r, Y(t)); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(fmtY(t), m.l - 6, Y(t)); }
+  return Y;
+}
+function drawStrategies(results) {
+  const cv = $("cStrat"), { ctx, w, h } = setupCanvas(cv), m = { l: 70, r: 14, t: 12, b: 28 };
+  // loop rather than Math.min(...curve): spreading 400k+ values overflows the call stack
+  let y0 = 0, y1 = 0;
+  for (const r of results) for (const v of r.curve) { if (v < y0) y0 = v; if (v > y1) y1 = v; }
+  const pad = (y1 - y0) * .06; y0 -= pad; y1 += pad;
+  const Y = axes(ctx, w, h, m, y0, y1, v => fmt(v, 0));
+  const n = results[0].curve.length, X = i => m.l + (w - m.l - m.r) * i / (n - 1);
+  ctx.strokeStyle = tok("--muted"); ctx.beginPath(); ctx.moveTo(m.l, Y(0)); ctx.lineTo(w - m.r, Y(0)); ctx.stroke();
+  results.forEach((r, k) => {
+    ctx.strokeStyle = PALETTE[k % PALETTE.length]; ctx.lineWidth = 1.6; ctx.beginPath();
+    const stepI = Math.max(1, Math.floor(n / 1500));
+    for (let i = 0; i < n; i += stepI) i ? ctx.lineTo(X(i), Y(r.curve[i])) : ctx.moveTo(X(i), Y(r.curve[i]));
+    ctx.lineTo(X(n - 1), Y(r.curve[n - 1])); ctx.stroke();
+    ctx.fillStyle = PALETTE[k % PALETTE.length]; ctx.beginPath(); ctx.arc(X(n - 1), Y(r.curve[n - 1]), 3, 0, 7); ctx.fill();
+  });
+  ctx.fillStyle = tok("--muted"); ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const t of niceTicks(0, n - 1, 6)) ctx.fillText(fmt(t, 0), X(t), h - m.b + 8);
+  ctx.save(); ctx.translate(14, (h - m.b + m.t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("Net units", 0, 0); ctx.restore();
+  $("lStrat").innerHTML = results.map((r, k) => `<span><i style="background:${PALETTE[k % PALETTE.length]}"></i>${r.name}</span>`).join("") +
+    `<span style="color:var(--muted)">x axis: hands played</span>`;
+}
+function drawBars(cv, labels, vals, opts = {}) {
+  const { ctx, w, h } = setupCanvas(cv), m = { l: 48, r: 10, t: 12, b: 34 };
+  const lo = Math.min(0, ...vals.map((v, i) => v - (opts.err ? opts.err[i] : 0)), ...(opts.dots || []));
+  const hi = Math.max(0, ...vals.map((v, i) => v + (opts.err ? opts.err[i] : 0)), ...(opts.dots || []));
+  const pad = (hi - lo) * .06, Y = axes(ctx, w, h, m, lo - (lo < 0 ? pad : 0), hi + pad, opts.fmtY || (v => v));
+  const bw = (w - m.l - m.r) / vals.length;
+  vals.forEach((v, i) => {
+    const x = m.l + i * bw + bw * .18, ww = bw * .64;
+    ctx.fillStyle = opts.color ? opts.color(v) : tok("--player");
+    ctx.fillRect(x, Math.min(Y(0), Y(v)), ww, Math.abs(Y(v) - Y(0)));
+    if (opts.err) { ctx.strokeStyle = tok("--ink"); ctx.lineWidth = 1; const cx = x + ww / 2;
+      ctx.beginPath(); ctx.moveTo(cx, Y(v - opts.err[i])); ctx.lineTo(cx, Y(v + opts.err[i]));
+      ctx.moveTo(cx - 4, Y(v - opts.err[i])); ctx.lineTo(cx + 4, Y(v - opts.err[i]));
+      ctx.moveTo(cx - 4, Y(v + opts.err[i])); ctx.lineTo(cx + 4, Y(v + opts.err[i])); ctx.stroke(); }
+    if (opts.dots) { ctx.fillStyle = tok("--brass"); ctx.beginPath(); ctx.arc(x + ww / 2, Y(opts.dots[i]), 3.5, 0, 7); ctx.fill(); }
+    ctx.fillStyle = tok("--muted"); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = "11px " + tok("--mono");
+    ctx.fillText(labels[i], x + ww / 2, h - m.b + 8);
+  });
+  ctx.strokeStyle = tok("--muted"); ctx.beginPath(); ctx.moveTo(m.l, Y(0)); ctx.lineTo(w - m.r, Y(0)); ctx.stroke();
+}
+let simCache = null, exactCache = {};
+function runSim() {
+  const n = +$("sShoes").value, decks = +$("sDecks").value, cut = +$("sCut").value, game = $("sGame").value, thr = +$("sThr").value;
+  const seedTxt = $("sSeed").value.trim(), rng = seedTxt === "" ? Math.random : mulberry32(+seedTxt);
+  $("sRun").disabled = true; const shoes = []; let i = 0; const t0 = performance.now();
+  const chunk = () => {
+    const end = Math.min(n, i + 1000);
+    for (; i < end; i++) shoes.push(playShoe(newShoe(decks, rng), cut));
+    $("sStatus").textContent = `Dealing shoes: ${fmt(i, 0)} of ${fmt(n, 0)}`;
+    if (i < n) return setTimeout(chunk, 0);
+    $("sStatus").textContent = "Scoring strategies…";
+    setTimeout(() => {
+      const ex = exactCache[decks] || (exactCache[decks] = exactOdds(decks));
+      const strat = Object.entries(STRATEGIES).map(([name, fn]) =>
+        ({ name: name === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : name, ...runStrategy(shoes, fn, game, thr) }));
+      simCache = { shoes, ex, strat, game, decks };
+      renderSim();
+      $("sStatus").textContent = `Done in ${fmt((performance.now() - t0) / 1000, 1)} s.`;
+      $("sRun").disabled = false;
+    }, 20);
+  };
+  chunk();
+}
+function renderSim() {
+  const { shoes, ex, strat, game } = simCache, hands = shoes.flat(), N = hands.length;
+  const cnt = k => hands.filter(h => h.w === k).length;
+  const pct = x => fmt(100 * x / N, 2) + "%";
+  $("sTiles").innerHTML = [["Hands", fmt(N, 0)], ["Banker", pct(cnt("B"))], ["Player", pct(cnt("P"))], ["Tie", pct(cnt("T"))],
+    ["Dragon 7", pct(hands.filter(h => h.d7).length)], ["Panda 8", pct(hands.filter(h => h.p8).length)]]
+    .map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+  const bets = [["Player", "P", "Player"], ["Banker", "B", game === "ez" ? "Banker (EZ)" : "Banker (5% comm.)"],
+                ["Tie", "T", "Tie"], ["Dragon 7", "D", "Dragon 7"], ["Panda 8", "N", "Panda 8"]];
+  $("sEdge").innerHTML = `<tr><th>Bet</th><th class="r">Simulated</th><th class="r">±95%</th><th class="r">Exact</th></tr>` +
+    bets.map(([name, b, key]) => {
+      let s = 0, s2 = 0; for (const h of hands) { const r = payout(h, b, game); s += r; s2 += r * r; }
+      const m = s / N, sd = Math.sqrt((s2 - N * m * m) / (N - 1));
+      return `<tr><td>${name}</td><td class="r">${fmt(-100 * m, 3)}%</td><td class="r">${fmt(196 * sd / Math.sqrt(N), 3)}</td><td class="r">${fmt(100 * ex.edge[key], 3)}%</td></tr>`;
+    }).join("");
+  $("sStrat").innerHTML = `<tr><th>Strategy</th><th class="r">Hands bet</th><th class="r">Units wagered</th><th class="r">Net units</th><th class="r">Return</th><th class="r">Worst drawdown</th></tr>` +
+    strat.map(r => `<tr><td>${r.name}</td><td class="r">${fmt(r.bets, 0)}</td><td class="r">${fmt(r.wagered, 0)}</td>
+      <td class="r ${r.net >= 0 ? "pos" : "neg"}">${sgn(r.net, 0)}</td><td class="r ${r.ret >= 0 ? "pos" : "neg"}">${sgn(r.ret, 2)}%</td><td class="r">${fmt(r.worst, 0)}</td></tr>`).join("");
+  drawStrategies(strat);
+  const d = dragonByCount(shoes);
+  drawBars($("cDragon"), ["<−2", "−2…0", "0…2", "2…4", "4…6", "≥6"], d.map(r => r.ev), {
+    err: d.map(r => r.ci), color: v => v >= 0 ? tok("--tie") : tok("--banker"), fmtY: v => v + "%" });
+  const s = streakLengths(shoes), K = 10, obs = Array(K).fill(0);
+  s.forEach(L => obs[Math.min(L, K) - 1]++);
+  const q = ex.prob.B / (ex.prob.B + ex.prob.P);
+  const theo = Array.from({ length: K }, (_, i) => 0.5 * (1 - q) * q ** i + 0.5 * q * (1 - q) ** i);
+  theo[K - 1] = 1 - theo.slice(0, K - 1).reduce((a, b) => a + b, 0);
+  drawBars($("cStreak"), [...Array(K - 1).keys()].map(i => String(i + 1)).concat(K + "+"), obs.map(x => 100 * x / s.length),
+    { dots: theo.map(x => 100 * x), color: () => tok("--player"), fmtY: v => v + "%" });
+}
+for (const [id, d] of [["sShoes", 0], ["sDecks", 0], ["sCut", 0], ["sThr", 1]])
+  $(id).addEventListener("input", () => $(id + "V").textContent = fmt(+$(id).value, d === 1 && +$(id).value % 1 ? 1 : 0));
+$("sRun").onclick = runSim;
+let simResize; addEventListener("resize", () => { clearTimeout(simResize); simResize = setTimeout(() => simCache && !$("v-simulate").hidden && renderSim(), 150); });
+
+/* ================= TRAINER ================= */
+const T = { shoe: null, hands: [], k: 0, quiz: false, right: 0, asked: 0, timer: null };
+function tNewShoe() { T.shoe = newShoe(8); T.hands = playShoe(T.shoe); T.k = 0; T.quiz = false; $("tFb").innerHTML = ""; tRender(true); }
+const tTruth = () => { const rc = T.k ? T.hands[T.k - 1].rcAfter : T.hands[0].rc;
+  const left = T.k ? T.hands[T.k - 1].leftAfter : T.hands[0].left; return { rc, left, tc: rc / (left / 52) }; };
+function tRender(anim = false) {
+  const tags = $("tTags").checked, pp = $("tP"), bb = $("tB"); pp.innerHTML = ""; bb.innerHTML = "";
+  if (T.k === 0) {
+    pp.innerHTML = `<div style="display:grid;gap:6px;justify-items:center"><span class="empty">Burn card, face up. It counts.</span></div>`;
+    pp.firstChild.appendChild(cardEl(T.shoe[0], { tag: tags }));
+    bb.innerHTML = `<span class="empty">Press Next hand to start</span>`;
+  } else {
+    const h = T.hands[T.k - 1], c = handCards(T.shoe, h);
+    c.player.forEach((id, i) => pp.appendChild(cardEl(id, { third: i === 2, tag: tags, anim })));
+    c.banker.forEach((id, i) => bb.appendChild(cardEl(id, { third: i === 2, tag: tags, anim })));
+  }
+  const t = tTruth();
+  $("tHand").textContent = `${T.k} / ${T.hands.length}`; $("tLeft").textContent = t.left;
+  $("tDecks").textContent = fmt(t.left / 52, 1);
+  $("tScore").textContent = T.asked ? `${T.right} / ${T.asked}` : "–";
+  $("tPrompt").hidden = !T.quiz;
+}
+function tNext() {
+  if (T.quiz) return;
+  if (T.k >= T.hands.length) { $("tFb").innerHTML = `<span>End of shoe. Press New shoe to keep practising.</span>`; stopAuto(); return; }
+  T.k++; $("tFb").innerHTML = "";
+  const every = +$("tEvery").value;
+  if (every && T.k % every === 0) { T.quiz = true; stopAuto(); setTimeout(() => $("tRC").focus(), 50); }
+  tRender(true);
+}
+function stopAuto() { $("tAuto").checked = false; clearInterval(T.timer); T.timer = null; }
+function startAuto() { clearInterval(T.timer); T.timer = setInterval(tNext, +$("tSpeed").value * 1000); }
+$("tAuto").onchange = () => $("tAuto").checked ? (T.quiz = false, startAuto()) : stopAuto();
+$("tSpeed").onchange = () => { if ($("tAuto").checked) startAuto(); };
+$("tNext").onclick = tNext; $("tNew").onclick = () => { stopAuto(); tNewShoe(); };
+$("tTags").onchange = () => tRender(false);
+$("tForm").addEventListener("submit", e => {
+  e.preventDefault(); const t = tTruth(), rcTxt = $("tRC").value, tcTxt = $("tTC").value;
+  if (rcTxt === "") { $("tFb").innerHTML = `<span class="neg">Enter your running count first.</span>`; return; }
+  const rcOk = +rcTxt === t.rc, tcOk = tcTxt === "" || Math.abs(+tcTxt - t.tc) <= 0.5;
+  T.asked++; if (rcOk && tcOk) T.right++;
+  $("tFb").innerHTML = `<span class="${rcOk ? "pos" : "neg"}">${rcOk ? "Running count correct." : `Not quite. The running count is ${t.rc >= 0 ? "+" : ""}${t.rc}.`}</span>` +
+    (tcTxt !== "" ? `<span class="${tcOk ? "pos" : "neg"}">True count ${sgn(t.tc)} (${t.left} cards, ${fmt(t.left / 52, 1)} decks left).</span>` : "") +
+    (t.tc >= 4 ? `<span><span class="hot">The Dragon bet is favourable here</span></span>` : "");
+  T.quiz = false; $("tRC").value = ""; $("tTC").value = ""; tRender(false);
+});
+$("tReveal").onclick = () => { const t = tTruth(); T.quiz = false;
+  $("tFb").innerHTML = `<span>Running count ${t.rc >= 0 ? "+" : ""}${t.rc} · True count ${sgn(t.tc)}</span>` +
+    (t.tc >= 4 ? `<span><span class="hot">The Dragon bet is favourable here</span></span>` : ""); tRender(false); };
+
+/* ================= ROUTER ================= */
+const VIEWS = ["play", "simulate", "trainer"];
+function route() {
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "play";
+  VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
+  document.querySelectorAll("nav a").forEach(a => a.dataset.view === v ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  if (v === "simulate") { if (!simCache) runSim(); else renderSim(); }
+  if (v !== "trainer") stopAuto();
+}
+addEventListener("hashchange", route);
+
+pNewShoe(8);
+tNewShoe();
+route();
+})();
+</script>
+</body>
+</html>

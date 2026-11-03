@@ -2,6 +2,33 @@
 A simulation of Baccarat (Punto Banco) in R, used to study its central tendencies, patterns,
 betting systems and side-bet card counting.
 
+## User interfaces
+
+Both interfaces have the same three tabs:
+
+* **Play**: deal a shoe hand by hand. Bet on Player, Banker, Tie, Dragon 7 and Panda 8,
+  with a bead plate, Big Road and an optional Dragon count.
+* **Simulate**: set shoes, decks, cut card, game and seed, then compare simulated vs exact
+  house edge, betting systems, and Dragon 7 return by true count.
+* **Count trainer**: practise the Dragon 7 count with timed auto-deal, periodic quizzes and
+  an optional practice mode that shows each card's tag.
+
+### Shiny app (`app.R`)
+
+The Shiny app runs on the tested R engine in `baccarat.R`.
+
+```r
+install.packages("shiny")   # once
+shiny::runApp()             # from the repo folder, or open app.R in RStudio and click Run App
+```
+
+![Shiny app](screenshot-shiny.png)
+
+### Browser version (`web/index.html`)
+
+A single self-contained page with the same engine ported to JavaScript. It reproduces the same
+exact odds and needs no R. Open the file in any browser, or enable GitHub Pages to host it.
+
 ## v2: `baccarat.R`
 
 A rewrite of the 2016 simulator. It uses base R only and needs no packages.
