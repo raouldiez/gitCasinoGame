@@ -63,4 +63,45 @@ r  <- play_strategy(nt, strategy_chop_progression)
 even <- sum(sign(r$net) * r$wagered)
 ok(even == old, sprintf("chop progression = 2016 bettingsys (%g units)", old))
 
+# ---- Configurable betting systems ----
+hs <- simulate_shoes(300, seed = 11, progress = FALSE)
+old <- play_strategy(hs, strategy_chop_progression)
+new <- play_strategy(hs, system_config("Chop progression (2016)", base = 1, table_max = Inf))
+ok(identical(old$net, new$net), "Chop progression system = original 2016 strategy, hand for hand")
+ok(identical(play_strategy(hs, strategy_flat_banker)$net,
+             play_strategy(hs, system_config("Flat", "B", base = 1))$net), "Flat Banker system = flat strategy")
+
+# Hand-made sequences (one shoe, no Dragon/Panda): stake sizes checked by hand
+seqh <- function(w) data.frame(shoe = 1L, winner = w, tc = 0, dragon7 = FALSE, panda8 = FALSE)
+stakes <- function(w, ...) play_strategy(seqh(w), system_config(...), game = "standard")$wagered
+nets   <- function(w, ...) play_strategy(seqh(w), system_config(...), game = "standard")$net
+
+ok(identical(stakes(c("P", "P", "B", "T", "P"), "Martingale", "B"), c(10, 20, 40, 10, 10)),
+   "Martingale doubles after losses, resets after a win, holds on a tie")
+ok(identical(nets(c("P", "P", "B", "T", "P"), "Martingale", "B"), c(-10, -20, 38, 0, -10)),
+   "Martingale results include 5% commission")
+ok(identical(stakes(c("P", "P", "P", "P"), "Martingale", "B", table_max = 30), c(10, 20, 30, 30)),
+   "table maximum caps the Martingale stake")
+ok(identical(stakes(rep("P", 4), "Martingale", "B", max_steps = 3), c(10, 20, 40, 10)),
+   "Martingale restarts at 1 unit after max_steps losses")
+ok(identical(stakes(c("B", "P", "P"), "Labouchere", "P"), c(40, 50, 50)),
+   "Labouchere: 1+3, then 1+4 after a loss, then 2+3 after a win")
+ok(identical(stakes(c("B", "B", "P", "P", "P"), "Oscar's Grind", "P"), c(10, 10, 10, 20, 10)),
+   "Oscar's Grind raises after a win only while behind, resets at +1 unit")
+ok(identical(stakes(c("P", "P", "P", "P", "P"), "1-3-2-6", "P"), c(10, 30, 20, 60, 10)),
+   "1-3-2-6 runs the sequence on wins and restarts after the 6")
+ok(identical(stakes(c("P", "P", "B", "P"), "Paroli", "P"), c(10, 20, 40, 10)),
+   "Paroli doubles after wins, resets after a loss")
+ok(identical(stakes(c("B", "B", "P", "P"), "Fibonacci", "P"), c(10, 10, 20, 10)),
+   "Fibonacci: up one step per loss, back two per win")
+ok(identical(stakes(c("B", "B", "P", "P"), "D'Alembert", "P"), c(10, 20, 30, 20)),
+   "D'Alembert: +1 unit per loss, -1 per win")
+ok(identical(stakes(c("B", "P", "B", "P"), "Flat", "opposite"), c(0, 10, 10, 10)) &&
+   identical(nets(c("B", "P", "B", "P"), "Flat", "opposite"), c(0, 10, 9.5, 10)),
+   "'opposite' bets against the last result (wins every hand of a chop), sits out the first hand")
+ok(identical(stakes(c("B", "B", "B", "B"), "Flat", "P", stop_loss = 20), c(10, 10, 0, 0)),
+   "stop-loss ends betting for the rest of the shoe")
+ok(identical(stakes(c("P", "P", "P", "P"), "Flat", "P", take_profit = 20), c(10, 10, 0, 0)),
+   "take-profit ends betting for the rest of the shoe")
+
 cat("\nAll tests passed.\n")

@@ -9,6 +9,8 @@ if (!isTRUE(l10n_info()[["UTF-8"]])) invisible(try(Sys.setlocale("LC_CTYPE", "C.
 source("baccarat.R", local = TRUE, encoding = "UTF-8")
 
 # ---- Helpers ----------------------------------------------------------------
+# Default for a blank input: numericInput gives NA (not NULL) when the box is empty
+`%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a))) b else a
 RED_SUITS <- c(2L, 3L)  # hearts, diamonds
 SUIT_HTML <- c("&spades;", "&hearts;", "&diams;", "&clubs;")  # locale-proof card faces
 
@@ -23,6 +25,22 @@ card_html <- function(id, tag = FALSE, small = FALSE) {
   }
   div(class = cls, span(class = "rank", RANK_LABEL[rank]),
       span(class = "suit", HTML(SUIT_HTML[suit])), tg)
+}
+
+# Start of shoe: the first card is turned face up, then that many cards (10 for
+# 10/J/Q/K) are burned face down. Only the face-up card counts for the Dragon count.
+burn_html <- function(shoe, show_tag = FALSE) {
+  first <- shoe[1]; n <- BURN_VALUE[card_rank(first)]
+  div(class = "burn",
+      div(class = "burn-title", "New shoe: burn cards"),
+      div(class = "burn-row",
+          div(class = "burn-up", card_html(first, tag = show_tag), div(class = "burn-cap", "Face up")),
+          div(class = "burn-down",
+              div(class = "backs", lapply(seq_len(n), function(i) div(class = "pcard back"))),
+              div(class = "burn-cap", sprintf("%d burned face down", n)))),
+      div(class = "burn-note", sprintf(
+        "%s is worth %d, so %d card%s go%s to the discard tray. Place your bets and press Deal.",
+        RANK_LABEL[card_rank(first)], n, n, if (n == 1) "" else "s", if (n == 1) "es" else "")))
 }
 
 hand_cards <- function(shoe, h, k) {
@@ -75,6 +93,15 @@ css <- "
          align-items: center; justify-content: center; position: relative; font-family: Georgia, serif; }
 .pcard .rank { font-size: 1.6rem; font-weight: 700; } .pcard .suit { font-size: 1.6rem; line-height: 1; }
 .pcard.red { color: #c0392b; }
+.pcard.back { background: repeating-linear-gradient(45deg, #8b1e1e 0 4px, #a8322c 4px 8px);
+              border: 3px solid #fffdf7; }
+.burn { text-align: center; display: grid; gap: 10px; justify-items: center; }
+.burn-title { font-size: 1.3rem; font-weight: 700; letter-spacing: .08em; }
+.burn-row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.burn-up, .burn-down { display: grid; gap: 8px; justify-items: center; }
+.backs { display: flex; } .backs .pcard + .pcard { margin-left: -46px; }
+.burn-cap { font-size: .85rem; color: #d9e6dc; margin-top: 14px; }
+.burn-note { font-size: .95rem; color: #e8efe9; }
 .pcard.small { width: 46px; height: 66px; } .pcard.small .rank, .pcard.small .suit { font-size: 1.05rem; }
 .pcard .tag { position: absolute; bottom: -22px; font: 600 .8rem system-ui; color: #ddd; }
 .pcard .tag.pos { color: #8fe3a5; } .pcard .tag.neg { color: #ffb4a8; }
@@ -96,6 +123,24 @@ table.road { border-collapse: collapse; } table.road td { width: 22px; height: 2
 .feedback-ok { color: #2e7d32; font-weight: 700; } .feedback-bad { color: #c62828; font-weight: 700; }
 "
 
+SIDE_CHOICES <- c("Banker" = "B", "Player" = "P", "Opposite of last result" = "opposite",
+                  "Same as last result" = "same")
+
+# Money-management inputs shared by Play (auto-bet) and Simulate; ids get a prefix.
+money_inputs <- function(prefix) tagList(
+  radioButtons(paste0(prefix, "side"), "Bet on", SIDE_CHOICES),
+  # width = "100%": numericInput's default 300px width overflows a two-column row
+  div(class = "d-flex gap-2",
+      numericInput(paste0(prefix, "base"), "Base bet", 10, min = 1, step = 5, width = "100%"),
+      numericInput(paste0(prefix, "max"), "Table max", 1000, min = 1, step = 100, width = "100%")),
+  numericInput(paste0(prefix, "steps"), "Max progression steps", 6, min = 1, max = 15, width = "100%"),
+  div(class = "d-flex gap-2",
+      numericInput(paste0(prefix, "sl"), "Stop-loss per shoe", 0, min = 0, step = 50, width = "100%"),
+      numericInput(paste0(prefix, "tp"), "Take-profit per shoe", 0, min = 0, step = 50, width = "100%")),
+  p(class = "small text-muted", "Stop-loss and take-profit of 0 mean off. Chop progression always bets ",
+    "against the last result; Dragon count always bets the Dragon 7.")
+)
+
 bet_input <- function(id, label, pays) {
   div(class = "d-flex align-items-center gap-2 mb-1",
       div(style = "width: 110px", strong(label), br(), span(class = "text-muted small", pays)),
@@ -111,20 +156,34 @@ ui <- bslib::page_navbar(
   # ---- Play -------------------------------------------------------------------
   bslib::nav_panel("Play",
     bslib::layout_sidebar(
-      sidebar = bslib::sidebar(width = 300,
+      sidebar = bslib::sidebar(width = 320,
         radioButtons("p_game", "Game", c("Standard (5% commission)" = "standard",
                                          "EZ Baccarat (no commission)" = "ez")),
         numericInput("p_bankroll", "Starting bankroll", 1000, min = 10, step = 100),
-        bet_input("bet_P", "Player", "1:1"),
-        bet_input("bet_B", "Banker", "0.95:1 / EZ 1:1"),
-        bet_input("bet_T", "Tie", "8:1"),
-        bet_input("bet_D", "Dragon 7", "40:1"),
-        bet_input("bet_N", "Panda 8", "25:1"),
+        checkboxInput("a_on", strong("Auto-bet with a system"), FALSE),
+        conditionalPanel("!input.a_on",
+          bet_input("bet_P", "Player", "1:1"),
+          bet_input("bet_B", "Banker", "0.95:1 / EZ 1:1"),
+          bet_input("bet_T", "Tie", "8:1"),
+          bet_input("bet_D", "Dragon 7", "40:1"),
+          bet_input("bet_N", "Panda 8", "25:1")),
+        conditionalPanel("input.a_on",
+          selectInput("a_system", "System", SYSTEMS),
+          uiOutput("a_help"),
+          conditionalPanel("input.a_system == 'Dragon count'",
+            sliderInput("a_thr", "Bet Dragon when true count ≥", 0, 10, 4, step = 0.5)),
+          money_inputs("a_"),
+          numericInput("a_hands", "Autoplay this many hands", 20, min = 1, max = 500),
+          div(class = "d-flex gap-2 mb-2",
+              actionButton("a_go", "Autoplay", class = "btn-success flex-fill"),
+              actionButton("a_stop", "Stop", class = "btn-outline-danger flex-fill")),
+          sliderInput("a_speed", "Seconds per hand", 0.1, 3, 0.6, step = 0.1)),
         div(class = "d-flex gap-2",
             actionButton("deal", "Deal", class = "btn-primary flex-fill"),
             actionButton("p_new", "New shoe", class = "btn-outline-secondary")),
         checkboxInput("p_showcount", "Show Dragon count", FALSE)
       ),
+      uiOutput("a_status"),
       bslib::layout_columns(col_widths = c(3, 3, 3, 3),
         div(div(class = "stat", "Bankroll"), uiOutput("p_bank", class = "statv")),
         div(div(class = "stat", "Session net"), uiOutput("p_net", class = "statv")),
@@ -152,15 +211,18 @@ ui <- bslib::page_navbar(
         sliderInput("s_cut", "Cards behind cut card", 6, 60, 14),
         radioButtons("s_game", "Game", c("Standard" = "standard", "EZ Baccarat" = "ez"), inline = TRUE),
         numericInput("s_seed", "Random seed (blank = random)", NA),
+        checkboxGroupInput("s_systems", "Systems to compare", SYSTEMS,
+                           selected = c("Flat", "Martingale", "Paroli", "Fibonacci",
+                                        "Chop progression (2016)", "Dragon count")),
+        money_inputs("s_"),
         sliderInput("s_thresh", "Dragon bet when true count ≥", 0, 10, 4, step = 0.5),
-        checkboxGroupInput("s_strats", "Strategies", names(default_strategies()),
-                           selected = names(default_strategies())),
         actionButton("s_run", "Run simulation", class = "btn-primary w-100")
       ),
       uiOutput("s_summary"),
-      bslib::layout_columns(col_widths = c(5, 7),
-        bslib::card(bslib::card_header("House edge: simulated vs exact (%)"), tableOutput("s_edge")),
-        bslib::card(bslib::card_header("Strategies (units)"), tableOutput("s_strat"))),
+      bslib::card(bslib::card_header("House edge: simulated vs exact (%)"), tableOutput("s_edge")),
+      bslib::card(bslib::card_header("Betting systems"), tableOutput("s_strat"),
+                  p(class = "small text-muted", "Return = net result ÷ total amount wagered. ",
+                    "Worst drawdown = largest drop from a previous high.")),
       bslib::card(bslib::card_header("Report"), plotOutput("s_plot", height = "720px")),
       bslib::card(bslib::card_header("Dragon 7 by true count"), tableOutput("s_dragon"))
     )),
@@ -210,36 +272,119 @@ server <- function(input, output, session) {
   # ---- Play ----
   play <- reactiveValues(shoe = NULL, h = NULL, k = 0, bank = 1000, start = 1000,
                          log = NULL, last = NULL)
+  # Auto-bet: the progression keeps its state between hands; it restarts each shoe,
+  # and stop-loss / take-profit apply to the current shoe (same as in Simulate).
+  auto <- reactiveValues(prog = NULL, shoe_net = 0, stopped = FALSE, remaining = 0, msg = NULL)
+  auto_cfg <- reactive(system_config(
+    input$a_system, input$a_side, base = max(1, input$a_base %||% 10),
+    table_max = max(1, input$a_max %||% 1000), max_steps = max(1, input$a_steps %||% 6),
+    stop_loss = input$a_sl %||% 0, take_profit = input$a_tp %||% 0, threshold = input$a_thr))
+  reset_auto <- function() {
+    auto$prog <- make_progression(isolate(input$a_system), isolate(max(1, input$a_steps %||% 6)))
+    auto$shoe_net <- 0; auto$stopped <- FALSE
+  }
+  observeEvent(list(input$a_on, input$a_system, input$a_steps), reset_auto())
+  output$a_help <- renderUI(p(class = "small text-muted", SYSTEM_HELP[[input$a_system]]))
+
   new_play_shoe <- function() {
     play$shoe <- new_shoe(); play$h <- play_shoe(play$shoe); play$k <- 0; play$last <- NULL
+    reset_auto()
   }
   observe({ isolate({ new_play_shoe(); play$bank <- play$start <- input$p_bankroll }) })
   observeEvent(input$p_bankroll, { play$bank <- play$start <- input$p_bankroll; play$log <- NULL },
                ignoreInit = TRUE)
   observeEvent(input$p_new, { new_play_shoe(); play$log <- NULL })
 
-  observeEvent(input$deal, {
+  BET_NAME <- c(P = "Player", B = "Banker", T = "Tie", D = "Dragon 7", N = "Panda 8")
+  stop_autoplay <- function(msg = NULL) { auto$remaining <- 0; if (!is.null(msg)) auto$msg <- msg }
+
+  do_deal <- function() {
     if (play$k >= nrow(play$h)) {
-      showNotification("Shoe finished. Starting a new shoe.", type = "message"); new_play_shoe()
+      # Start the next shoe and stop on the burn, so it is always seen before hand 1
+      showNotification("Shoe finished. New shoe: burn cards shown, press Deal for the first hand.",
+                       type = "message")
+      new_play_shoe(); return(TRUE)
     }
-    bets <- c(P = input$bet_P, B = input$bet_B, T = input$bet_T, D = input$bet_D, N = input$bet_N)
-    bets[is.na(bets) | bets < 0] <- 0
+    k <- play$k + 1
+    winners <- play$h$winner[seq_len(k - 1)]
+    last <- tail(c(NA_character_, winners[winners != "T"]), 1)
+    if (isTRUE(input$a_on)) {
+      bets <- c(P = 0, B = 0, T = 0, D = 0, N = 0)
+      if (!auto$stopped) {
+        d <- system_decide(auto_cfg(), auto$prog, last, play$h$tc[k])
+        if (d$stake > 0) bets[[d$side]] <- d$stake
+      }
+    } else {
+      bets <- c(P = input$bet_P, B = input$bet_B, T = input$bet_T, D = input$bet_D, N = input$bet_N)
+      bets[is.na(bets) | bets < 0] <- 0
+    }
     if (sum(bets) > play$bank) {
-      showNotification("Total bets exceed your bankroll.", type = "error"); return()
+      stop_autoplay("Stopped: the next bet is more than your bankroll.")
+      showNotification("Total bets exceed your bankroll.", type = "error"); return(FALSE)
     }
-    play$k <- play$k + 1; k <- play$k
-    pay <- unlist(settle(play$h[k, ], input$p_game))
-    net <- sum(bets * pay[c("Player", "Banker", "Tie", "Dragon7", "Panda8")])
+    play$k <- k
+    pay <- unlist(settle(play$h[k, ], input$p_game))[c("Player", "Banker", "Tie", "Dragon7", "Panda8")]
+    names(pay) <- names(bets)
+    net <- sum(bets * pay)
     play$bank <- play$bank + net
     play$last <- list(net = net, bet = sum(bets))
+
+    if (isTRUE(input$a_on)) {
+      side <- names(bets)[bets > 0]
+      if (length(side) && pay[[side]] != 0) auto$prog$update(pay[[side]] > 0)
+      w <- play$h$winner[k]
+      if (w != "T" && !is.na(last) && w != last) auto$prog$side_changed()
+      auto$shoe_net <- auto$shoe_net + net
+      cfg <- auto_cfg()
+      if (!auto$stopped && cfg$stop_loss > 0 && auto$shoe_net <= -cfg$stop_loss) {
+        auto$stopped <- TRUE; stop_autoplay("Stop-loss reached: no more bets this shoe.")
+      } else if (!auto$stopped && cfg$take_profit > 0 && auto$shoe_net >= cfg$take_profit) {
+        auto$stopped <- TRUE; stop_autoplay("Take-profit reached: no more bets this shoe.")
+      }
+    }
+
     hc <- hand_cards(play$shoe, play$h, k)
+    placed <- bets[bets > 0]
     play$log <- rbind(data.frame(
       Hand = as.integer(k),
       Player = paste(card_label(hc$player), collapse = " "), P = as.integer(play$h$p_total[k]),
       Banker = paste(card_label(hc$banker), collapse = " "), B = as.integer(play$h$b_total[k]),
       Result = paste0(RESULT_TEXT[[play$h$winner[k]]],
                       if (play$h$dragon7[k]) " – Dragon 7" else if (play$h$panda8[k]) " – Panda 8" else ""),
-      Bet = sum(bets), Net = sprintf("%+.2f", net), check.names = FALSE), play$log)
+      `Bet on` = if (length(placed)) paste(BET_NAME[names(placed)], placed, collapse = ", ") else "–",
+      Net = sprintf("%+.2f", net), check.names = FALSE), play$log)
+    TRUE
+  }
+  observeEvent(input$deal, do_deal())
+
+  # Autoplay: deal one hand per tick until the count runs out or a limit stops it
+  observeEvent(input$a_go, { auto$msg <- NULL; auto$remaining <- max(0, input$a_hands %||% 0) })
+  observeEvent(input$a_stop, stop_autoplay("Autoplay stopped."))
+  observeEvent(input$a_on, if (!isTRUE(input$a_on)) stop_autoplay())
+  observe({
+    req(auto$remaining > 0)
+    invalidateLater(max(100, (input$a_speed %||% 0.6) * 1000))
+    isolate({
+      ok <- do_deal()
+      auto$remaining <- if (isTRUE(ok)) auto$remaining - 1 else 0
+      if (auto$remaining == 0 && is.null(auto$msg)) auto$msg <- "Autoplay finished."
+    })
+  })
+  output$a_status <- renderUI({
+    if (!isTRUE(input$a_on)) return(NULL)
+    k <- play$k + 1; winners <- play$h$winner[seq_len(play$k)]
+    last <- tail(c(NA_character_, winners[winners != "T"]), 1)
+    nxt <- if (auto$stopped) "No more bets this shoe (limit reached)"
+           else if (k > nrow(play$h)) "Shoe finished"
+           else {
+             d <- system_decide(auto_cfg(), auto$prog, last, play$h$tc[k])
+             if (d$stake > 0) sprintf("Next bet: %s %s", BET_NAME[[d$side]], format(d$stake)) else "Next hand: sitting out"
+           }
+    div(class = "count-box mb-2 d-flex gap-3 flex-wrap",
+        strong(input$a_system), span(nxt),
+        span(sprintf("Shoe result %+.2f", auto$shoe_net)),
+        if (auto$remaining > 0) span(class = "hot", sprintf("Autoplay: %d left", auto$remaining)),
+        if (!is.null(auto$msg) && auto$remaining == 0) em(auto$msg))
   })
 
   output$p_bank <- renderUI(sprintf("%.2f", play$bank))
@@ -251,7 +396,7 @@ server <- function(input, output, session) {
   output$p_left <- renderText(cards_left_after(play$h, play$k))
 
   side_cards <- function(which) renderUI({
-    if (play$k == 0) return(div(class = "cards", em("Place your bets and press Deal")))
+    if (play$k == 0) return(NULL)   # the burn is shown across the table instead
     hc <- hand_cards(play$shoe, play$h, play$k)
     div(class = "cards", lapply(hc[[which]], card_html))
   })
@@ -259,12 +404,13 @@ server <- function(input, output, session) {
   output$p_ptotal <- renderUI(if (play$k) div(class = "total", play$h$p_total[play$k]))
   output$p_btotal <- renderUI(if (play$k) div(class = "total", play$h$b_total[play$k]))
   output$p_banner <- renderUI({
-    k <- play$k; if (k == 0) return(div(class = "banner"))
+    k <- play$k; if (k == 0) return(burn_html(play$shoe, show_tag = isTRUE(input$p_showcount)))
     h <- play$h
     sp <- if (h$dragon7[k]) "DRAGON 7" else if (h$panda8[k]) "PANDA 8" else if (h$natural[k]) "Natural"
     div(class = "banner", RESULT_TEXT[[h$winner[k]]], if (!is.null(sp)) span(class = "special", sp),
         if (play$last$bet > 0) div(style = "font-size: 1.1rem; font-weight: 500",
-          sprintf("You %s %.2f", if (play$last$net >= 0) "won" else "lost", abs(play$last$net))),
+          if (play$last$net == 0) "Push: your bet is returned"
+          else sprintf("You %s %.2f", if (play$last$net > 0) "won" else "lost", abs(play$last$net))),
         if (k == nrow(h)) div(style = "font-size: 1rem", "Cut card is out: that was the last hand of the shoe."))
   })
   output$p_count <- renderUI({
@@ -280,26 +426,32 @@ server <- function(input, output, session) {
 
   # ---- Simulate ----
   sim <- eventReactive(input$s_run, {
-    validate(need(length(input$s_strats) > 0, "Pick at least one strategy."))
+    validate(need(length(input$s_systems) > 0, "Pick at least one system."))
     withProgress(message = "Dealing shoes...", value = 0, {
       seed <- if (is.na(input$s_seed)) NULL else input$s_seed
       h <- simulate_shoes(input$s_shoes, decks = input$s_decks, cut_card = input$s_cut,
                           seed = seed, progress = FALSE)
-      incProgress(0.3, message = "Scoring strategies...")
-      strats <- default_strategies()
-      thr <- input$s_thresh
-      strats[["Dragon count TC>=4"]] <- function(s) strategy_dragon_count(s, threshold = thr)
-      strats <- strats[input$s_strats]
-      names(strats)[names(strats) == "Dragon count TC>=4"] <- sprintf("Dragon count TC>=%g", thr)
-      cs <- compare_strategies(h, strats, game = input$s_game)
-      incProgress(0.6, message = "Computing exact odds...")
+      incProgress(0.2)
+      systems <- default_systems(input$s_systems, side = input$s_side,
+        base = max(1, input$s_base %||% 10), table_max = max(1, input$s_max %||% 1000),
+        max_steps = max(1, input$s_steps %||% 6), stop_loss = input$s_sl %||% 0,
+        take_profit = input$s_tp %||% 0, threshold = input$s_thresh)
+      names(systems)[names(systems) == "Dragon count"] <- sprintf("Dragon count (TC ≥ %g)", input$s_thresh)
+      runs <- list()
+      for (nm in names(systems)) {   # one at a time so the progress bar moves
+        incProgress(0.7 / length(systems), message = paste("Scoring", nm))
+        runs[[nm]] <- play_strategy(h, systems[[nm]], game = input$s_game)
+      }
+      cs <- as.data.frame(do.call(rbind, lapply(runs, `[[`, "summary")))
+      attr(cs, "runs") <- runs
+      incProgress(0.05, message = "Computing exact odds...")
       edge <- house_edge(h, input$s_game, decks = input$s_decks)
       list(h = h, cs = cs, edge = edge, game = input$s_game)
     })
   })
   output$s_summary <- renderUI({
     if (input$s_run == 0) return(div(class = "alert alert-light",
-      "Choose settings and press Run simulation. 1,000 shoes takes about 5 seconds."))
+      "Choose settings and press Run simulation. 1,000 shoes with six systems takes about 5–10 seconds."))
     s <- sim(); tb <- table(factor(s$h$winner, c("B", "P", "T")))
     div(class = "alert alert-success", sprintf(
       "%s hands in %s shoes · Banker %.2f%% · Player %.2f%% · Tie %.2f%% · Dragon 7 %.2f%% · Panda 8 %.2f%%",
@@ -311,9 +463,11 @@ server <- function(input, output, session) {
                                digits = 3, striped = TRUE)
   output$s_strat <- renderTable({
     cs <- sim()$cs
-    data.frame(Strategy = rownames(cs), `Hands bet` = format(cs$hands_bet, big.mark = ","),
-               Wagered = format(cs$units_wagered, big.mark = ","), Net = cs$net_units,
-               `Return %` = cs$return_pct, `Worst drawdown` = cs$worst_drawdown, check.names = FALSE)
+    data.frame(System = rownames(cs), `Hands bet` = format(cs$hands_bet, big.mark = ","),
+               Wagered = format(round(cs$wagered), big.mark = ","),
+               Net = format(round(cs$net), big.mark = ","),
+               `Return %` = sprintf("%+.2f", cs$return_pct),
+               `Worst drawdown` = format(round(cs$worst_drawdown), big.mark = ","), check.names = FALSE)
   }, striped = TRUE)
   output$s_plot <- renderPlot({ s <- sim(); plot_report(s$h, game = s$game, cs = s$cs) }, res = 96)
   output$s_dragon <- renderTable(setNames(dragon_by_count(sim()$h),

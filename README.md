@@ -6,10 +6,26 @@ betting systems and side-bet card counting.
 
 Both interfaces have the same three tabs:
 
-* **Play**: deal a shoe hand by hand. Bet on Player, Banker, Tie, Dragon 7 and Panda 8,
-  with a bead plate, Big Road and an optional Dragon count.
+* **Play**: each shoe starts by showing the burn: the first card face up, then that many
+  cards face down (10 for 10/J/Q/K). Deal hand by hand and bet on Player, Banker, Tie,
+  Dragon 7 and Panda 8, with a bead plate, Big Road and an optional Dragon count. Turn on
+  **Auto-bet** to let a betting system place the bets, and **Autoplay** to run it for N hands.
 * **Simulate**: set shoes, decks, cut card, game and seed, then compare simulated vs exact
   house edge, betting systems, and Dragon 7 return by true count.
+
+### Betting systems
+
+Every system is a choice of **side** (Banker, Player, opposite of the last result, or same as the
+last result) combined with a **bet-sizing rule**: Flat, Martingale, Paroli, Fibonacci, D'Alembert,
+1-3-2-6, Labouchère, Oscar's Grind, the 2016 chop progression, or the Dragon count. Settings:
+base bet, table maximum, maximum progression steps, and a stop-loss and take-profit per shoe.
+Ties (and, in EZ Baccarat, a Banker bet on a Dragon 7) are pushes and leave the progression unchanged.
+
+```r
+cfg <- system_config("Martingale", side = "B", base = 10, table_max = 1000, max_steps = 6)
+run <- play_strategy(h, cfg, game = "standard")
+compare_strategies(h, default_systems(side = "opposite", stop_loss = 200))
+```
 * **Count trainer**: practise the Dragon 7 count with timed auto-deal, periodic quizzes and
   an optional practice mode that shows each card's tag.
 

@@ -290,6 +290,7 @@ strategy_dragon_count <- function(state, threshold = 4) {
 
 play_strategy <- function(h, strategy, game = c("standard", "ez")) {
   game <- match.arg(game)
+  if (inherits(strategy, "betting_system")) return(run_system(h, strategy, game))
   # Plain vectors/matrix: indexing data-frame columns inside the loop is ~5x slower
   pay <- as.matrix(settle(h, game)[c("Player", "Banker", "Tie", "Dragon7")])
   payout_col <- c(P = 1L, B = 2L, T = 3L, D = 4L)
@@ -314,12 +315,17 @@ play_strategy <- function(h, strategy, game = c("standard", "ez")) {
       last <- w
     }
   }
+  summarise_run(net, wagered)
+}
+
+# Shared result format for function strategies and configurable systems.
+summarise_run <- function(net, wagered) {
   cum <- cumsum(net)
   list(net = net, wagered = wagered, cumulative = cum,
-       summary = c(hands_bet = sum(wagered > 0), units_wagered = sum(wagered),
-                   net_units = round(sum(net), 1),
+       summary = c(hands_bet = sum(wagered > 0), wagered = sum(wagered),
+                   net = round(sum(net), 2),
                    return_pct = round(100 * sum(net) / max(1, sum(wagered)), 3),
-                   worst_drawdown = round(min(cum - cummax(pmax(cum, 0))), 1)))
+                   worst_drawdown = round(min(cum - cummax(pmax(cum, 0))), 2)))
 }
 
 default_strategies <- function() list(
@@ -337,6 +343,125 @@ compare_strategies <- function(h, strategies = default_strategies(), game = c("s
   tab <- as.data.frame(do.call(rbind, lapply(runs, `[[`, "summary")))
   attr(tab, "runs") <- runs   # per-hand detail, e.g. attr(x, "runs")[[1]]$cumulative
   tab
+}
+
+# ---- Configurable betting systems ---------------------------------------------
+# A system = which side to bet x how to size the bet, plus money-management limits.
+# Progressions count wins and losses in units and ignore commission, as players do.
+# Pushes (ties on Player/Banker, EZ Dragon 7 on Banker) leave the progression unchanged.
+SYSTEMS <- c("Flat", "Martingale", "Paroli", "Fibonacci", "D'Alembert", "1-3-2-6",
+             "Labouchere", "Oscar's Grind", "Chop progression (2016)", "Dragon count")
+
+SYSTEM_HELP <- c(
+  "Flat"                    = "Same bet every hand.",
+  "Martingale"              = "Double after each loss; back to 1 unit after a win or after the step limit.",
+  "Paroli"                  = "Double after each win; back to 1 unit after a loss or after 3 wins in a row.",
+  "Fibonacci"               = "Move one step up 1,1,2,3,5,8... after a loss, two steps back after a win.",
+  "D'Alembert"              = "Add 1 unit after a loss, take 1 off after a win.",
+  "1-3-2-6"                 = "Bet 1, 3, 2, 6 units on consecutive wins; back to 1 after a loss or after the 6.",
+  "Labouchere"              = "Line 1-2-3: bet first + last; cross both off on a win, add the bet to the line on a loss.",
+  "Oscar's Grind"           = "Aim for +1 unit per series: raise 1 unit after a win, never past what finishes the series.",
+  "Chop progression (2016)" = "Raoul's 2016 system: bet against the last result, +1 unit per loss, sit out after 3 losses until the side changes.",
+  "Dragon count"            = "Flat Dragon 7 side bet only when the true count reaches the threshold."
+)
+
+# side: "B", "P", "opposite" (bet against the last result), "same" (bet the last result).
+# Chop progression always bets "opposite"; Dragon count always bets the Dragon 7.
+# stop_loss / take_profit: stop betting for the rest of the shoe once the shoe's
+# result reaches -stop_loss or +take_profit (0 = off).
+system_config <- function(system = "Flat", side = c("B", "P", "opposite", "same"), base = 10,
+                          table_max = 1000, max_steps = 6, stop_loss = 0, take_profit = 0,
+                          threshold = 4) {
+  system <- match.arg(system, SYSTEMS)
+  side <- match.arg(side)
+  if (system == "Chop progression (2016)") side <- "opposite"
+  if (system == "Dragon count") side <- "D"
+  structure(list(system = system, side = side, base = base, table_max = table_max,
+                 max_steps = max_steps, stop_loss = stop_loss, take_profit = take_profit,
+                 threshold = threshold), class = "betting_system")
+}
+
+# Progression state machine. units() is the next bet size in units (0 = sit out);
+# update(won) is called after every decided (non-push) bet.
+make_progression <- function(system, max_steps = 6) {
+  fib <- c(1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987)
+  k <- 0; line <- c(1, 2, 3); u <- 1; p <- 0; sitout <- FALSE
+  reset <- function() { k <<- 0; line <<- c(1, 2, 3); u <<- 1; p <<- 0; sitout <<- FALSE }
+  units <- function() switch(system,
+    "Martingale" = , "Paroli" = 2^k,
+    "Fibonacci" = fib[k + 1],
+    "D'Alembert" = 1 + k,
+    "1-3-2-6" = c(1, 3, 2, 6)[k + 1],
+    "Labouchere" = if (length(line) == 1) line else line[1] + line[length(line)],
+    "Oscar's Grind" = u,
+    "Chop progression (2016)" = if (sitout) 0 else 1 + k,
+    1)
+  update <- function(won) {
+    bet <- units()
+    switch(system,
+      "Martingale" = { k <<- if (won) 0 else k + 1; if (k >= max_steps) k <<- 0 },
+      "Paroli"     = { k <<- if (won) k + 1 else 0; if (k >= 3) k <<- 0 },
+      "Fibonacci"  = { k <<- if (won) max(0, k - 2) else k + 1
+                       if (k >= min(max_steps, length(fib))) k <<- 0 },
+      "D'Alembert" = { k <<- if (won) max(0, k - 1) else k + 1; if (k >= max_steps) k <<- 0 },
+      "1-3-2-6"    = { k <<- if (won) (k + 1) %% 4 else 0 },
+      "Labouchere" = { line <<- if (won) line[-c(1, length(line))] else c(line, bet)
+                       if (!length(line) || length(line) > 3 + max_steps) line <<- c(1, 2, 3) },
+      "Oscar's Grind" = { if (won) { p <<- p + bet
+                                     if (p >= 1) { u <<- 1; p <<- 0 } else u <<- min(u + 1, 1 - p)
+                          } else p <<- p - bet },
+      "Chop progression (2016)" = { k <<- if (won) 0 else k + 1
+                                    if (k >= 3) { k <<- 0; sitout <<- TRUE } },
+      NULL)
+    invisible()
+  }
+  side_changed <- function() sitout <<- FALSE
+  list(units = units, update = update, reset = reset, side_changed = side_changed)
+}
+
+# Decide the next bet: list(side = "P"/"B"/"D" or NA, stake = money amount).
+system_decide <- function(cfg, prog, last, tc) {
+  side <- switch(cfg$side,
+    B = "B", P = "P",
+    opposite = if (is.na(last)) NA_character_ else if (last == "B") "P" else "B",
+    same = if (is.na(last)) "B" else last,
+    D = if (tc >= cfg$threshold) "D" else NA_character_)
+  u <- prog$units()
+  if (is.na(side) || u <= 0) return(list(side = NA_character_, stake = 0))
+  list(side = side, stake = min(u * cfg$base, cfg$table_max))
+}
+
+run_system <- function(h, cfg, game = c("standard", "ez")) {
+  game <- match.arg(game)
+  pay <- as.matrix(settle(h, game)[c("Player", "Banker", "Tie", "Dragon7")])
+  payout_col <- c(P = 1L, B = 2L, T = 3L, D = 4L)
+  new_shoe_at <- c(TRUE, h$shoe[-1] != h$shoe[-nrow(h)])
+  tc <- h$tc; winner <- h$winner
+  prog <- make_progression(cfg$system, cfg$max_steps)
+  n <- nrow(h)
+  net <- wagered <- numeric(n)
+  for (i in seq_len(n)) {
+    if (new_shoe_at[i]) { last <- NA_character_; prog$reset(); shoe_net <- 0; stopped <- FALSE }
+    if (!stopped) {
+      d <- system_decide(cfg, prog, last, tc[i])
+      if (d$stake > 0) {
+        r <- pay[i, payout_col[[d$side]]]
+        net[i] <- r * d$stake; wagered[i] <- d$stake
+        if (r != 0) prog$update(r > 0)
+        shoe_net <- shoe_net + net[i]
+        if ((cfg$stop_loss > 0 && shoe_net <= -cfg$stop_loss) ||
+            (cfg$take_profit > 0 && shoe_net >= cfg$take_profit)) stopped <- TRUE
+      }
+    }
+    w <- winner[i]
+    if (w != "T") { if (!is.na(last) && w != last) prog$side_changed(); last <- w }
+  }
+  summarise_run(net, wagered)
+}
+
+# Every system with the same side and money settings, ready for compare_strategies().
+default_systems <- function(systems = SYSTEMS, ...) {
+  setNames(lapply(systems, function(s) system_config(s, ...)), systems)
 }
 
 # ---- Analysis helpers -----------------------------------------------------
@@ -416,9 +541,10 @@ plot_report <- function(h, file = NULL, game = "standard", cs = NULL) {
   # 1. Strategies
   if (is.null(cs)) cs <- compare_strategies(h, game = game)   # pass cs to reuse results
   runs <- attr(cs, "runs")
-  cols <- c("#2a6f97", "#c8553d", "#6a994e", "#8a5a9e", "#e09f3e", "#333333")
+  cols <- rep(c("#2a6f97", "#c8553d", "#6a994e", "#8a5a9e", "#e09f3e", "#333333",
+                "#17becf", "#b5651d", "#d63384", "#7f7f7f"), length.out = length(runs))
   rng <- range(unlist(lapply(runs, `[[`, "cumulative")))
-  plot(NA, xlim = c(1, nrow(h)), ylim = rng, xlab = "Hand", ylab = "Net units",
+  plot(NA, xlim = c(1, nrow(h)), ylim = rng, xlab = "Hand", ylab = "Net result",
        main = "Betting systems vs the house")
   abline(h = 0, col = "grey70")
   for (i in seq_along(runs)) lines(runs[[i]]$cumulative, col = cols[i], lwd = 1.5)
