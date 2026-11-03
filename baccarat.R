@@ -81,7 +81,8 @@ play_shoe <- function(shoe = new_shoe(), cut_card = 14, burn = TRUE,
     p_cards = integer(max_h), b_cards = integer(max_h), p3 = integer(max_h),
     winner = character(max_h), natural = logical(max_h),
     dragon7 = logical(max_h), panda8 = logical(max_h),
-    cards_left = integer(max_h), rc = numeric(max_h), tc = numeric(max_h)
+    cards_left = integer(max_h), rc = numeric(max_h), tc = numeric(max_h),
+    first = integer(max_h), used = integer(max_h)   # position of the hand in the shoe
   )
 
   k <- 0L
@@ -122,6 +123,7 @@ play_shoe <- function(shoe = new_shoe(), cut_card = 14, burn = TRUE,
     out$hand[k] <- k; out$p_total[k] <- p; out$b_total[k] <- b
     out$p_cards[k] <- pn; out$b_cards[k] <- bn; out$p3[k] <- p3
     out$winner[k] <- w; out$natural[k] <- natural
+    out$first[k] <- i; out$used[k] <- used
     out$dragon7[k] <- w == "B" && bn == 3L && b == 7L
     out$panda8[k]  <- w == "P" && pn == 3L && p == 8L
 
@@ -194,7 +196,15 @@ settle <- function(h, game = c("standard", "ez")) {
 # ---- Exact odds by enumeration ---------------------------------------------
 # Enumerates every ordered 6-card sequence by point value (10^6 rows) and weights it
 # by its exact probability off the top of a fresh shoe. Unused cards marginalise out.
+# Results are cached per deck count, since the enumeration takes a second or two.
+.exact_cache <- new.env()
 exact_odds <- function(decks = 8) {
+  key <- as.character(decks)
+  if (is.null(.exact_cache[[key]])) .exact_cache[[key]] <- .exact_odds_compute(decks)
+  .exact_cache[[key]]
+}
+
+.exact_odds_compute <- function(decks) {
   n <- c(16, rep(4, 9)) * decks              # cards of each point value 0..9
   N <- sum(n)
   g <- as.matrix(expand.grid(rep(list(0:9), 6)))
@@ -280,22 +290,25 @@ strategy_dragon_count <- function(state, threshold = 4) {
 
 play_strategy <- function(h, strategy, game = c("standard", "ez")) {
   game <- match.arg(game)
-  pay <- settle(h, game)
-  payout_col <- c(P = "Player", B = "Banker", T = "Tie", D = "Dragon7")
+  # Plain vectors/matrix: indexing data-frame columns inside the loop is ~5x slower
+  pay <- as.matrix(settle(h, game)[c("Player", "Banker", "Tie", "Dragon7")])
+  payout_col <- c(P = 1L, B = 2L, T = 3L, D = 4L)
+  new_shoe_at <- c(TRUE, h$shoe[-1] != h$shoe[-nrow(h)])
+  tc <- h$tc; winner <- h$winner
   n <- nrow(h)
   net <- wagered <- numeric(n)
   for (i in seq_len(n)) {
-    if (i == 1 || h$shoe[i] != h$shoe[i - 1]) {
+    if (new_shoe_at[i]) {
       last <- NA_character_; streak <- 0; losses <- 0
     }
-    d <- strategy(list(last = last, streak = streak, losses = losses, tc = h$tc[i]))
+    d <- strategy(list(last = last, streak = streak, losses = losses, tc = tc[i]))
     if (d$bet != "none" && d$units > 0) {
-      r <- pay[[payout_col[[d$bet]]]][i] * d$units
+      r <- pay[i, payout_col[[d$bet]]] * d$units
       wagered[i] <- d$units
       net[i] <- r
       if (r < 0) losses <- losses + 1 else if (r > 0) losses <- 0
     }
-    w <- h$winner[i]
+    w <- winner[i]
     if (w != "T") {
       streak <- if (!is.na(last) && w == last) streak + 1 else 1
       last <- w
@@ -367,13 +380,41 @@ print_bead_plate <- function(winner, rows = 6) {
   for (r in seq_len(rows)) cat(paste(m[r, ], collapse = " "), "\n")
 }
 
+# Big Road scoreboard: each streak goes down a column; a new column starts when the
+# side changes. Streaks longer than the board turn right ("dragon tail"). Ties are
+# not placed; they are counted on the cell before them.
+# Returns data.frame(col, row, winner, ties), 0-based positions.
+big_road <- function(winner, rows = 6) {
+  cells <- list(); occupied <- new.env()
+  key <- function(c, r) paste(c, r)
+  last <- NA; run_col <- -1; col <- -1; row <- -1; pending_ties <- 0
+  for (w in winner) {
+    if (w == "T") {
+      if (length(cells)) cells[[length(cells)]]$ties <- cells[[length(cells)]]$ties + 1
+      else pending_ties <- pending_ties + 1
+      next
+    }
+    if (!is.na(last) && w == last) {
+      if (row + 1 < rows && is.null(occupied[[key(col, row + 1)]])) row <- row + 1
+      else col <- col + 1
+    } else {
+      run_col <- run_col + 1; col <- run_col; row <- 0
+    }
+    occupied[[key(col, row)]] <- TRUE
+    cells[[length(cells) + 1]] <- list(col = col, row = row, winner = w, ties = pending_ties)
+    pending_ties <- 0; last <- w
+  }
+  if (!length(cells)) return(data.frame(col = integer(), row = integer(), winner = character(), ties = integer()))
+  do.call(rbind, lapply(cells, as.data.frame, stringsAsFactors = FALSE))
+}
+
 # ---- Plots ---------------------------------------------------------------
-plot_report <- function(h, file = NULL, game = "standard") {
+plot_report <- function(h, file = NULL, game = "standard", cs = NULL) {
   if (!is.null(file)) png(file, width = 1600, height = 1200, res = 150)
   op <- par(mfrow = c(2, 2), mar = c(4.5, 4.5, 3, 1)); on.exit(par(op))
 
   # 1. Strategies
-  cs <- compare_strategies(h, game = game)
+  if (is.null(cs)) cs <- compare_strategies(h, game = game)   # pass cs to reuse results
   runs <- attr(cs, "runs")
   cols <- c("#2a6f97", "#c8553d", "#6a994e", "#8a5a9e", "#e09f3e", "#333333")
   rng <- range(unlist(lapply(runs, `[[`, "cumulative")))
