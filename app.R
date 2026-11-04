@@ -305,7 +305,7 @@ server <- function(input, output, session) {
                          log = NULL, last = NULL)
   # Auto-bet: the progression keeps its state between hands; it restarts each shoe,
   # and stop-loss / take-profit apply to the current shoe (same as in Simulate).
-  auto <- reactiveValues(prog = NULL, shoe_net = 0, stopped = FALSE, remaining = 0, msg = NULL)
+  auto <- reactiveValues(prog = NULL, shoe_net = 0, stopped = FALSE, remaining = 0, running = FALSE, msg = NULL)
   auto_cfg <- reactive(system_config(
     input$a_system, input$a_side, base = max(1, input$a_base %||% 10),
     table_max = max(1, input$a_max %||% 1000), max_steps = max(1, input$a_steps %||% 6),
@@ -332,7 +332,9 @@ server <- function(input, output, session) {
                 DP = "DragonBonusP", DB = "DragonBonusB")
   # Dragon 7 is an EZ Baccarat bet, so a Dragon count system sits out at a standard table
   dragon_unavailable <- function(side) identical(side, "D") && identical(input$p_game, "standard")
-  stop_autoplay <- function(msg = NULL) { auto$remaining <- 0; if (!is.null(msg)) auto$msg <- msg }
+  stop_autoplay <- function(msg = NULL) {
+    auto$remaining <- 0; auto$running <- FALSE; if (!is.null(msg)) auto$msg <- msg
+  }
 
   do_deal <- function() {
     if (play$k >= nrow(play$h)) {
@@ -394,16 +396,26 @@ server <- function(input, output, session) {
   observeEvent(input$deal, do_deal())
 
   # Autoplay: deal one hand per tick until the count runs out or a limit stops it
-  observeEvent(input$a_go, { auto$msg <- NULL; auto$remaining <- max(0, input$a_hands %||% 0) })
+  observeEvent(input$a_go, {
+    auto$msg <- NULL; auto$remaining <- max(0, input$a_hands %||% 0); auto$running <- auto$remaining > 0
+  })
   observeEvent(input$a_stop, stop_autoplay("Autoplay stopped."))
   observeEvent(input$a_on, if (!isTRUE(input$a_on)) stop_autoplay())
+  # One hand per timer tick. The loop depends only on auto$running, which changes when autoplay
+  # starts or stops. (Depending on auto$remaining, which every tick changes, made the observer
+  # re-run at once instead of waiting for the timer, so all hands were dealt in one burst and
+  # the screen, including Session net, only refreshed at the end.)
   observe({
-    req(auto$remaining > 0)
+    req(auto$running)
     invalidateLater(max(100, (input$a_speed %||% 0.6) * 1000))
     isolate({
+      if (auto$remaining <= 0) return()
       ok <- do_deal()
       auto$remaining <- if (isTRUE(ok)) auto$remaining - 1 else 0
-      if (auto$remaining == 0 && is.null(auto$msg)) auto$msg <- "Autoplay finished."
+      if (auto$remaining == 0) {
+        auto$running <- FALSE
+        if (is.null(auto$msg)) auto$msg <- "Autoplay finished."
+      }
     })
   })
   output$a_status <- renderUI({
