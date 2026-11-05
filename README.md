@@ -119,8 +119,10 @@ record their real point spread.
 
 ## Credits
 
-* **Raoul R. Diez**: author. Wrote the original simulator in 2016 (`BaccaratAnalysis*.R`),
-  including the idea of tracking 8s and 9s for the Dragon 7 bet, and directed the 2026 v2 rewrite.
+* **Raoul R. Diez, DODT**: author. Doctor in Organizational Development and Transformation;
+  Bachelor's degree in Computer Science, with post-baccalaureate graduate studies in Computer Science.
+  Wrote the original simulator in 2016 (`BaccaratAnalysis*.R`) as a study in probability and
+  simulation, including the idea of tracking 8s and 9s for the Dragon 7 bet, and directed the 2026 v2 rewrite.
 * **Eliot Jacobson, Ph.D.**: the Dragon 7 card count used throughout (tags 4–7 = −1, 8–9 = +2;
   bet at a true count of +4 or more), from his analysis *Card Counting the Dragon Side Bet in
   EZ Baccarat* (2011), published on [Wizard of Odds](https://wizardofodds.com/games/baccarat/).

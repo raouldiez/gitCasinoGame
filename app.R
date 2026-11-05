@@ -166,7 +166,7 @@ ui <- bslib::page_navbar(
   header = tags$head(tags$style(HTML(css))),
   # one HTML string: tags() would put a space between each link and the full stop after it
   footer = div(class = "credits", HTML(paste0(
-    "Baccarat Simulator by Raoul R. Diez (2016; v2 2026, built with help from Claude by Anthropic). ",
+    "Baccarat Simulator by Raoul R. Diez, DODT (2016; v2 2026, built with help from Claude by Anthropic). ",
     "Dragon 7 count: Eliot Jacobson, Ph.D., ",
     "<a href='https://wizardofodds.com/games/baccarat/' target='_blank'>via Wizard of Odds</a>. ",
     "Exact odds checked against figures published by Michael Shackleford (Wizard of Odds). ",
