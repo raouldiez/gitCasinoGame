@@ -528,6 +528,52 @@ shoe_summary <- function(h) {
   }))
 }
 
+# How often each shoe reaches the Dragon true count threshold (TC before the hand >= threshold,
+# the same test the Dragon count strategy uses to place its bet).
+# Returns one row per shoe: hands dealt, hands at/above the threshold, their share,
+# first hand that qualified (NA if none) and the shoe's highest true count.
+count_frequency <- function(h, threshold = 4) {
+  at <- h$tc >= threshold
+  by_shoe <- split(seq_len(nrow(h)), h$shoe)
+  do.call(rbind, lapply(by_shoe, function(i) {
+    q <- which(at[i])
+    data.frame(shoe = h$shoe[i[1]], hands = length(i), hands_at = length(q),
+               pct_hands = 100 * length(q) / length(i),
+               first_hand = if (length(q)) h$hand[i][q[1]] else NA_integer_,
+               max_tc = max(h$tc[i]))
+  }))
+}
+
+# Summary of count_frequency(): how many shoes reach the threshold, how often, how early,
+# a distribution of qualifying hands per shoe, and where in the shoe they fall.
+count_frequency_summary <- function(h, threshold = 4,
+                                    buckets = c(0, 1, 3, 6, 11, 21, Inf)) {
+  cf <- count_frequency(h, threshold)
+  at <- h$tc >= threshold
+  labels <- c("0", "1-2", "3-5", "6-10", "11-20", "21+")
+  dist <- table(cut(cf$hands_at, buckets, labels = labels, right = FALSE))
+  # Stage of the shoe by share of cards already dealt before the hand
+  # each shoe's own starting size: cards left before its first hand (after the burn)
+  n_cards <- ave(h$cards_left, h$shoe, FUN = max)
+  dealt <- 1 - h$cards_left / n_cards
+  stage <- cut(dealt, c(-Inf, 1/3, 2/3, Inf), labels = c("First third", "Middle third", "Last third"))
+  list(
+    threshold = threshold,
+    shoes = nrow(cf),
+    pct_shoes_reaching = 100 * mean(cf$hands_at > 0),
+    mean_hands_per_shoe = mean(cf$hands_at),
+    median_hands_per_shoe = median(cf$hands_at),
+    mean_hands_when_reached = if (any(cf$hands_at > 0)) mean(cf$hands_at[cf$hands_at > 0]) else 0,
+    pct_hands = 100 * mean(at),
+    median_first_hand = median(cf$first_hand, na.rm = TRUE),
+    distribution = data.frame(hands_per_shoe = labels, shoes = as.vector(dist),
+                              pct_shoes = round(100 * as.vector(dist) / nrow(cf), 1)),
+    by_stage = data.frame(stage = levels(stage),
+                          pct_of_qualifying_hands = round(100 * as.vector(table(stage[at])) / max(1, sum(at)), 1)),
+    per_shoe = cf
+  )
+}
+
 # Bead plate: results in columns of 6, as on a casino scoreboard.
 print_bead_plate <- function(winner, rows = 6) {
   n <- length(winner); cols <- ceiling(n / rows)

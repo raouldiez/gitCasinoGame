@@ -336,6 +336,14 @@ canvas { width: 100%; display: block; }
         <div class="panel"><h3>Streak lengths vs pure chance</h3><canvas id="cStreak" height="260"></canvas>
           <p class="note">Bars are simulated streaks (ties ignored); dots are what independent hands predict. They match, so patterns carry no information.</p></div>
       </div>
+      <div class="panel"><h3 id="cfTitle">How often a shoe reaches the Dragon count threshold</h3>
+        <div class="strip" id="cfTiles"></div>
+        <div class="two" style="margin-top:12px">
+          <div><canvas id="cCf" height="240"></canvas></div>
+          <div><div class="tbl"><table id="cfDist"></table></div><div class="tbl" style="margin-top:10px"><table id="cfStage"></table></div></div>
+        </div>
+        <p class="note">A qualifying hand is one where the true count before the deal is at or above the threshold, so the Dragon count would bet it.
+          Stage of the shoe is measured by the share of cards already dealt.</p></div>
     </div>
   </div>
 </section>
@@ -636,6 +644,44 @@ function dragonByCount(shoes, edges = [-Infinity, -2, 0, 2, 4, 6, Infinity]) {
     const m = x.n ? x.sum / x.n : 0, sd = x.n > 1 ? Math.sqrt((x.sq - x.n * m * m) / (x.n - 1)) : 0;
     return { ...x, ev: 100 * m, ci: x.n ? 196 * sd / Math.sqrt(x.n) : 0 };
   });
+}
+
+// How often each shoe reaches the Dragon true count threshold (port of count_frequency_summary).
+// A qualifying hand has TC before the deal >= threshold, the same test the Dragon count bets on.
+const CF_LABELS = ["0", "1-2", "3-5", "6-10", "11-20", "21+"], CF_EDGES = [0, 1, 3, 6, 11, 21, Infinity];
+function countFrequency(shoes, threshold = 4) {
+  const perShoe = [], dist = new Array(CF_LABELS.length).fill(0), stage = [0, 0, 0];
+  let qualifying = 0, hands = 0;
+  for (const shoe of shoes) {
+    const nCards = shoe[0].left;   // this shoe's starting size, after the burn
+    let at = 0, first = null, maxTc = -Infinity;
+    shoe.forEach((h, i) => {
+      maxTc = Math.max(maxTc, h.tc);
+      if (h.tc >= threshold) {
+        at++; if (first === null) first = i + 1;
+        const dealt = 1 - h.left / nCards;
+        stage[dealt <= 1 / 3 ? 0 : dealt <= 2 / 3 ? 1 : 2]++;
+      }
+    });
+    perShoe.push({ hands: shoe.length, at, first, maxTc });
+    dist[CF_EDGES.findIndex((e, k) => at >= e && at < CF_EDGES[k + 1])]++;
+    qualifying += at; hands += shoe.length;
+  }
+  const ats = perShoe.map(s => s.at).sort((a, b) => a - b);
+  const median = a => a.length ? (a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2) : null;
+  const reached = perShoe.filter(s => s.at > 0);
+  return {
+    threshold, shoes: shoes.length,
+    pctShoesReaching: 100 * reached.length / shoes.length,
+    meanHandsPerShoe: qualifying / shoes.length,
+    medianHandsPerShoe: median(ats),
+    meanHandsWhenReached: reached.length ? reached.reduce((a, s) => a + s.at, 0) / reached.length : 0,
+    pctHands: 100 * qualifying / hands,
+    medianFirstHand: median(reached.map(s => s.first).sort((a, b) => a - b)),
+    distribution: CF_LABELS.map((label, k) => ({ label, shoes: dist[k], pct: 100 * dist[k] / shoes.length })),
+    byStage: ["First third", "Middle third", "Last third"].map((s, k) => ({ stage: s, pct: qualifying ? 100 * stage[k] / qualifying : 0 })),
+    perShoe,
+  };
 }
 
 function streakLengths(shoes) {
@@ -979,7 +1025,7 @@ function runSim() {
       const strat = chosen.filter(s => !(skipped && s === "Dragon count")).map(system => ({
         name: system === "Dragon count" ? `Dragon count (TC ≥ ${thr})` : system,
         ...runSystem(shoes, { ...money, system }, game) }));
-      simCache = { shoes, ex, strat, game, decks, skipped };
+      simCache = { shoes, ex, strat, game, decks, skipped, thr };
       renderSim();
       $("sStatus").textContent = `Done in ${fmt((performance.now() - t0) / 1000, 1)} s.`;
       $("sRun").disabled = false;
@@ -1021,6 +1067,24 @@ function renderSim() {
   theo[K - 1] = 1 - theo.slice(0, K - 1).reduce((a, b) => a + b, 0);
   drawBars($("cStreak"), [...Array(K - 1).keys()].map(i => String(i + 1)).concat(K + "+"), obs.map(x => 100 * x / s.length),
     { dots: theo.map(x => 100 * x), color: () => tok("--player"), fmtY: v => v + "%" });
+  renderCountFrequency(shoes, simCache.thr);
+}
+// How often each shoe reaches the Dragon true count threshold
+function renderCountFrequency(shoes, thr) {
+  const cf = countFrequency(shoes, thr);
+  $("cfTitle").textContent = `How often a shoe reaches a Dragon true count of +${thr} or higher`;
+  $("cfTiles").innerHTML = [["Shoes that reach it", fmt(cf.pctShoesReaching, 1) + "%"],
+    ["Qualifying hands per shoe", `${fmt(cf.meanHandsPerShoe, 1)} avg · ${fmt(cf.medianHandsPerShoe, cf.medianHandsPerShoe % 1 ? 1 : 0)} median`],
+    ["Per shoe, when reached", fmt(cf.meanHandsWhenReached, 1) + " hands"],
+    ["First reached (median)", cf.medianFirstHand === null ? "–" : `hand ${fmt(cf.medianFirstHand, cf.medianFirstHand % 1 ? 1 : 0)}`],
+    ["Share of all hands", fmt(cf.pctHands, 1) + "%"]]
+    .map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v" style="font-size:1.1rem">${v}</div></div>`).join("");
+  drawBars($("cCf"), cf.distribution.map(d => d.label), cf.distribution.map(d => d.pct), {
+    color: v => v === cf.distribution[0].pct ? tok("--banker") : tok("--player"), fmtY: v => v + "%" });
+  $("cfDist").innerHTML = `<tr><th>Qualifying hands</th><th class="r">Shoes</th><th class="r">% of shoes</th></tr>` +
+    cf.distribution.map(d => `<tr><td>${d.label}</td><td class="r">${fmt(d.shoes, 0)}</td><td class="r">${fmt(d.pct, 1)}%</td></tr>`).join("");
+  $("cfStage").innerHTML = `<tr><th>Stage of the shoe</th><th class="r">% of qualifying hands</th></tr>` +
+    cf.byStage.map(x => `<tr><td>${x.stage}</td><td class="r">${fmt(x.pct, 1)}%</td></tr>`).join("");
 }
 for (const [id, d] of [["sShoes", 0], ["sDecks", 0], ["sCut", 0], ["sThr", 1]])
   $(id).addEventListener("input", () => $(id + "V").textContent = fmt(+$(id).value, d === 1 && +$(id).value % 1 ? 1 : 0));

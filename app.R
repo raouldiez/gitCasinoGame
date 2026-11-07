@@ -255,7 +255,16 @@ ui <- bslib::page_navbar(
                   p(class = "small text-muted", "Return = net result ÷ total amount wagered. ",
                     "Worst drawdown = largest drop from a previous high.")),
       bslib::card(bslib::card_header("Report"), plotOutput("s_plot", height = "720px")),
-      bslib::card(bslib::card_header("Dragon 7 by true count"), tableOutput("s_dragon"))
+      bslib::card(bslib::card_header("Dragon 7 by true count"), tableOutput("s_dragon")),
+      bslib::card(bslib::card_header(textOutput("s_cf_title", inline = TRUE)),
+        uiOutput("s_cf_tiles"),
+        bslib::layout_columns(col_widths = c(7, 5),
+          div(plotOutput("s_cf_plot", height = "260px")),
+          div(strong("Shoes by number of qualifying hands"), tableOutput("s_cf_dist"),
+              strong("Where in the shoe they come"), tableOutput("s_cf_stage"))),
+        p(class = "small text-muted", "A qualifying hand is one where the true count before the deal is at or ",
+          "above the threshold, so the Dragon count strategy would bet it. Stage of the shoe is measured by the ",
+          "share of cards already dealt."))
     )),
 
   # ---- Count trainer -------------------------------------------------------------
@@ -502,7 +511,8 @@ server <- function(input, output, session) {
       attr(cs, "runs") <- runs
       incProgress(0.05, message = "Computing exact odds...")
       edge <- house_edge(h, input$s_game, decks = input$s_decks)
-      list(h = h, cs = cs, edge = edge, game = input$s_game, skipped = skipped)
+      cf <- count_frequency_summary(h, input$s_thresh)
+      list(h = h, cs = cs, edge = edge, game = input$s_game, skipped = skipped, cf = cf)
     })
   })
   output$s_summary <- renderUI({
@@ -530,6 +540,31 @@ server <- function(input, output, session) {
                `Worst drawdown` = format(round(cs$worst_drawdown), big.mark = ","), check.names = FALSE)
   }, striped = TRUE)
   output$s_plot <- renderPlot({ s <- sim(); plot_report(s$h, game = s$game, cs = s$cs) }, res = 96)
+  # ---- How often each shoe reaches the Dragon true count threshold ----
+  output$s_cf_title <- renderText(if (input$s_run == 0) "How often a shoe reaches the Dragon count threshold"
+    else sprintf("How often a shoe reaches a Dragon true count of +%g or higher", sim()$cf$threshold))
+  output$s_cf_tiles <- renderUI({
+    cf <- sim()$cf
+    tile <- function(k, v) div(class = "col", div(class = "stat", k), div(class = "statv", v))
+    div(class = "row g-2 mb-2",
+      tile("Shoes that reach it", sprintf("%.1f%%", cf$pct_shoes_reaching)),
+      tile("Qualifying hands per shoe", sprintf("%.1f avg · %g median", cf$mean_hands_per_shoe, cf$median_hands_per_shoe)),
+      tile("Per shoe, when reached", sprintf("%.1f hands", cf$mean_hands_when_reached)),
+      tile("First reached (median)", if (is.na(cf$median_first_hand)) "–" else sprintf("hand %g", cf$median_first_hand)),
+      tile("Share of all hands", sprintf("%.1f%%", cf$pct_hands)))
+  })
+  output$s_cf_plot <- renderPlot({
+    cf <- sim()$cf; d <- cf$distribution
+    op <- par(mar = c(4.2, 4.2, 1, 1)); on.exit(par(op))
+    b <- barplot(d$pct_shoes, names.arg = d$hands_per_shoe, col = c("#c8553d", rep("#2a6f97", 5)), border = NA,
+                 ylim = c(0, max(d$pct_shoes) * 1.18), xlab = "Qualifying hands in the shoe", ylab = "% of shoes")
+    text(b, d$pct_shoes, sprintf("%.1f%%", d$pct_shoes), pos = 3, cex = 0.85)
+  }, res = 96)
+  output$s_cf_dist <- renderTable(setNames(sim()$cf$distribution, c("Qualifying hands", "Shoes", "% of shoes")),
+                                  striped = TRUE, spacing = "xs", digits = 1)
+  output$s_cf_stage <- renderTable(setNames(sim()$cf$by_stage, c("Stage of the shoe", "% of qualifying hands")),
+                                   striped = TRUE, spacing = "xs", digits = 1)
+
   output$s_dragon <- renderTable(setNames(dragon_by_count(sim()$h),
     c("True count", "Hands", "% of hands", "EV %", "± 95% CI")), striped = TRUE)
 
