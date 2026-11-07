@@ -123,4 +123,22 @@ ok(identical(house_edge(simulate_shoes(50, seed = 1, progress = FALSE), "standar
    identical(house_edge(simulate_shoes(50, seed = 1, progress = FALSE), "ez")$bet,
              c("Player", "Banker", "Tie", "DragonBonusP", "DragonBonusB", "Dragon7", "Panda8")),
    "Both games offer Dragon Bonus; EZ adds Dragon 7 and Panda 8")
+# ---- Dragon true count frequency per shoe ----
+# Two hand-made shoes: shoe 1 reaches TC >= 4 on hands 3 and 4; shoe 2 never does.
+cfh <- data.frame(shoe = c(1, 1, 1, 1, 2, 2, 2), hand = c(1, 2, 3, 4, 1, 2, 3),
+                  tc = c(0, 3.9, 4, 6, -1, 2, 3.99), cards_left = c(400, 300, 200, 100, 400, 250, 100))
+cf <- count_frequency(cfh, 4)
+ok(identical(cf$hands_at, c(2L, 0L)) && identical(cf$first_hand, c(3, NA)) && identical(cf$max_tc, c(6, 3.99)),
+   "count_frequency: hands at TC >= 4 per shoe, first such hand, highest TC")
+cs <- count_frequency_summary(cfh, 4)
+ok(cs$pct_shoes_reaching == 50 && cs$mean_hands_per_shoe == 1 && cs$mean_hands_when_reached == 2 &&
+   identical(cs$distribution$shoes, c(1L, 1L, 0L, 0L, 0L, 0L)),
+   "count_frequency_summary: share of shoes reaching it, hands per shoe, distribution")
+ok(identical(cs$by_stage$pct_of_qualifying_hands, c(0, 50, 50)),
+   "count_frequency_summary: qualifying hands split by stage of the shoe")
+hs2 <- simulate_shoes(200, seed = 3, progress = FALSE)
+ok(sum(count_frequency(hs2, 4)$hands_at) == sum(hs2$tc >= 4) &&
+   sum(count_frequency(hs2, 4)$hands_at) == play_strategy(hs2, strategy_dragon_count)$summary[["hands_bet"]],
+   "per-shoe counts add up to the hands the Dragon count strategy bets")
+
 cat("\nAll tests passed.\n")
