@@ -264,7 +264,19 @@ ui <- bslib::page_navbar(
               strong("Where in the shoe they come"), tableOutput("s_cf_stage"))),
         p(class = "small text-muted", "A qualifying hand is one where the true count before the deal is at or ",
           "above the threshold, so the Dragon count strategy would bet it. Stage of the shoe is measured by the ",
-          "share of cards already dealt."))
+          "share of cards already dealt.")),
+      bslib::card(bslib::card_header("Dragon 7s per shoe"),
+        uiOutput("s_dps_tiles"),
+        bslib::layout_columns(col_widths = c(7, 5),
+          div(strong("How many Dragon 7s a shoe gets"),
+              p(class = "small text-muted mb-1", "Bars: simulated shoes. Dots: what independent hands predict with the same average."),
+              plotOutput("s_dps_plot", height = "260px")),
+          div(strong("Shoes by number of Dragon 7s"), div(style = "max-height: 300px; overflow: auto", tableOutput("s_dps_dist")))),
+        strong(textOutput("s_dps_rec_title", inline = TRUE)),
+        p(class = "small text-muted mb-1", "Dragon true count before each hand of the record shoe; red dots are its Dragon 7s, ",
+          "the dashed line is the bet threshold. A Dragon 7 usually uses up 4s to 7s, which pulls the count down right after it; ",
+          "the record shoe can still come at any count."),
+        plotOutput("s_dps_rec", height = "240px"))
     )),
 
   # ---- Count trainer -------------------------------------------------------------
@@ -512,7 +524,8 @@ server <- function(input, output, session) {
       incProgress(0.05, message = "Computing exact odds...")
       edge <- house_edge(h, input$s_game, decks = input$s_decks)
       cf <- count_frequency_summary(h, input$s_thresh)
-      list(h = h, cs = cs, edge = edge, game = input$s_game, skipped = skipped, cf = cf)
+      dps <- dragons_per_shoe(h, input$s_thresh)
+      list(h = h, cs = cs, edge = edge, game = input$s_game, skipped = skipped, cf = cf, dps = dps)
     })
   })
   output$s_summary <- renderUI({
@@ -564,6 +577,53 @@ server <- function(input, output, session) {
                                   striped = TRUE, spacing = "xs", digits = 1)
   output$s_cf_stage <- renderTable(setNames(sim()$cf$by_stage, c("Stage of the shoe", "% of qualifying hands")),
                                    striped = TRUE, spacing = "xs", digits = 1)
+
+  # ---- Dragon 7s per shoe ----
+  output$s_dps_tiles <- renderUI({
+    d <- sim()$dps
+    tile <- function(k, v, s = NULL) div(class = "col", div(class = "stat", k), div(class = "statv", v),
+                                          if (!is.null(s)) div(class = "small text-muted", s))
+    div(class = "row g-2 mb-2",
+      tile("Most in one shoe", d$max_dragons, sprintf("shoes with that many: %s", format(d$record_shoes, big.mark = ","))),
+      tile("Average per shoe", sprintf("%.2f", d$avg_dragons), sprintf("median %g", d$median_dragons)),
+      tile("Shoes with none", sprintf("%.1f%%", d$pct_zero)),
+      tile("Shoes with 5 or more", sprintf("%.1f%%", d$pct_5plus)),
+      tile("Panda 8 per shoe", sprintf("%.2f", d$avg_panda), sprintf("most in one shoe: %d", d$max_panda)),
+      tile(sprintf("Dragons at TC ≥ +%g", d$threshold), sprintf("%.1f%%", d$pct_dragons_at_threshold),
+           sprintf("of all Dragons, on %.1f%% of hands", d$pct_hands_at_threshold)))
+  })
+  output$s_dps_plot <- renderPlot({
+    d <- sim()$dps; x <- d$distribution[d$distribution$dragons <= d$max_dragons, ]
+    op <- par(mar = c(4.2, 4.2, 1, 1)); on.exit(par(op))
+    b <- barplot(x$pct_shoes, names.arg = x$dragons, border = NA,
+                 col = ifelse(x$dragons == d$max_dragons, "#c8553d", "#2a6f97"),
+                 ylim = c(0, max(x$pct_shoes, x$independent_pct) * 1.18),
+                 xlab = "Dragon 7s in the shoe", ylab = "% of shoes")
+    points(b, x$independent_pct, pch = 19, cex = 0.9)
+    text(b, pmax(x$pct_shoes, x$independent_pct), format(x$shoes, big.mark = ","), pos = 3, cex = 0.75)
+  }, res = 96)
+  output$s_dps_dist <- renderTable({
+    x <- sim()$dps$distribution
+    # short headings: this table sits in a narrow column
+    data.frame(Dragons = x$dragons, Shoes = format(x$shoes, big.mark = ","),
+               `%` = sprintf("%.2f", x$pct_shoes), `Indep. %` = sprintf("%.2f", x$independent_pct),
+               `Panda 8s` = format(x$panda_shoes, big.mark = ","), check.names = FALSE)
+  }, striped = TRUE, spacing = "xs", align = "r")
+  output$s_dps_rec_title <- renderText({
+    d <- sim()$dps
+    sprintf("The record shoe (#%s): %d Dragon 7s in %d hands", format(d$record_shoe, big.mark = ","),
+            d$max_dragons, nrow(d$record))
+  })
+  output$s_dps_rec <- renderPlot({
+    d <- sim()$dps; r <- d$record
+    op <- par(mar = c(4.2, 4.2, 1, 1)); on.exit(par(op))
+    yl <- range(c(r$true_count, 0, d$threshold)) + c(-1, 1)
+    plot(r$hand, r$true_count, type = "l", lwd = 2, col = "#2a6f97", ylim = yl,
+         xlab = "Hand", ylab = "Dragon true count", las = 1)
+    abline(h = 0, col = "grey60"); abline(h = d$threshold, lty = 2, col = "grey40")
+    hit <- r$dragon7
+    points(r$hand[hit], r$true_count[hit], pch = 21, bg = "#c8553d", col = "white", cex = 1.6)
+  }, res = 96)
 
   output$s_dragon <- renderTable(setNames(dragon_by_count(sim()$h),
     c("True count", "Hands", "% of hands", "EV %", "± 95% CI")), striped = TRUE)

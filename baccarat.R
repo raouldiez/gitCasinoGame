@@ -574,6 +574,39 @@ count_frequency_summary <- function(h, threshold = 4,
   )
 }
 
+# Dragon 7s per shoe: the most in one shoe, the average and median, shares of shoes, a
+# distribution against what independent hands predict (Poisson with the same average),
+# Panda 8s for comparison, Dragon 7s at the count threshold, and the record shoe hand by hand.
+dragons_per_shoe <- function(h, threshold = 4) {
+  by <- function(x) as.vector(tapply(x, h$shoe, sum))
+  shoe_ids <- sort(unique(h$shoe))
+  d7 <- by(h$dragon7); p8 <- by(h$panda8)
+  n <- length(d7); lambda <- mean(d7); top <- max(d7, p8)
+  k <- 0:top
+  record_id <- shoe_ids[which.max(d7)]       # first shoe with the most Dragon 7s
+  rec <- h[h$shoe == record_id, ]
+  hot <- h$tc >= threshold
+  list(
+    shoes = n,
+    max_dragons = max(d7), record_shoes = sum(d7 == max(d7)), record_shoe = record_id,
+    avg_dragons = lambda, median_dragons = median(d7),
+    pct_zero = 100 * mean(d7 == 0), pct_5plus = 100 * mean(d7 >= 5),
+    avg_panda = mean(p8), max_panda = max(p8),
+    threshold = threshold,
+    avg_dragons_at_threshold = sum(h$dragon7 & hot) / n,
+    pct_dragons_at_threshold = 100 * sum(h$dragon7 & hot) / max(1, sum(h$dragon7)),
+    pct_hands_at_threshold = 100 * mean(hot),
+    distribution = data.frame(dragons = k,
+                              shoes = as.vector(table(factor(d7, k))),
+                              pct_shoes = 100 * as.vector(table(factor(d7, k))) / n,
+                              independent_pct = 100 * dpois(k, lambda),
+                              panda_shoes = as.vector(table(factor(p8, k))),
+                              panda_pct = 100 * as.vector(table(factor(p8, k))) / n),
+    record = data.frame(hand = rec$hand, player_total = rec$p_total, banker_total = rec$b_total,
+                        winner = rec$winner, dragon7 = rec$dragon7, true_count = rec$tc, running_count = rec$rc)
+  )
+}
+
 # Bead plate: results in columns of 6, as on a casino scoreboard.
 print_bead_plate <- function(winner, rows = 6) {
   n <- length(winner); cols <- ceiling(n / rows)

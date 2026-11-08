@@ -141,4 +141,25 @@ ok(sum(count_frequency(hs2, 4)$hands_at) == sum(hs2$tc >= 4) &&
    sum(count_frequency(hs2, 4)$hands_at) == play_strategy(hs2, strategy_dragon_count)$summary[["hands_bet"]],
    "per-shoe counts add up to the hands the Dragon count strategy bets")
 
+# ---- Dragon 7s per shoe ----
+# Hand-made: shoe 1 has 2 Dragons and 1 Panda, shoe 2 none, shoe 3 has 3 Dragons (the record).
+dh <- data.frame(shoe = rep(1:3, each = 4), hand = rep(1:4, 3),
+                 dragon7 = c(TRUE, FALSE, TRUE, FALSE,  FALSE, FALSE, FALSE, FALSE,  TRUE, TRUE, FALSE, TRUE),
+                 panda8  = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,  FALSE, FALSE, FALSE, FALSE),
+                 tc = c(0, 5, 1, 0,  0, 0, 0, 0,  4, -1, 0, 6), p_total = 1, b_total = 7, winner = "B", rc = 0)
+dp <- dragons_per_shoe(dh, 4)
+ok(dp$max_dragons == 3 && dp$record_shoe == 3 && dp$record_shoes == 1 && abs(dp$avg_dragons - 5/3) < 1e-12 &&
+   dp$median_dragons == 2 && abs(dp$pct_zero - 100/3) < 1e-9 && dp$pct_5plus == 0,
+   "dragons_per_shoe: most in one shoe, record shoe, average, median, share with none")
+ok(identical(dp$distribution$shoes, c(1L, 0L, 1L, 1L)) && identical(dp$distribution$panda_shoes, c(2L, 1L, 0L, 0L)) &&
+   abs(sum(dp$distribution$independent_pct) - 100 * ppois(3, 5/3)) < 1e-9,
+   "dragons_per_shoe: distribution of Dragon and Panda counts, Poisson comparison")
+ok(abs(dp$avg_dragons_at_threshold - 2/3) < 1e-12 && dp$pct_dragons_at_threshold == 40 &&
+   identical(dp$record$hand, 1:4) && sum(dp$record$dragon7) == 3,
+   "dragons_per_shoe: Dragons at the count threshold, record shoe hands")
+ds <- dragons_per_shoe(hs2, 4)
+ok(sum(ds$distribution$shoes) == length(unique(hs2$shoe)) &&
+   abs(ds$avg_dragons - sum(hs2$dragon7) / length(unique(hs2$shoe))) < 1e-12,
+   "dragons_per_shoe on a simulation: every shoe counted once, average matches total")
+
 cat("\nAll tests passed.\n")

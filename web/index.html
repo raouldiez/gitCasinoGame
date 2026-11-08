@@ -344,6 +344,17 @@ canvas { width: 100%; display: block; }
         </div>
         <p class="note">A qualifying hand is one where the true count before the deal is at or above the threshold, so the Dragon count would bet it.
           Stage of the shoe is measured by the share of cards already dealt.</p></div>
+      <div class="panel"><h3>Dragon 7s per shoe</h3>
+        <div class="strip" id="dpsTiles"></div>
+        <div class="two" style="margin-top:12px">
+          <div><canvas id="cDps" height="240"></canvas>
+            <p class="note">Bars are simulated shoes; dots are what independent hands predict with the same average. Numbers above the bars are shoe counts.</p></div>
+          <div class="tbl" style="max-height:300px;overflow:auto"><table id="dpsDist"></table></div>
+        </div>
+        <h3 id="dpsRecTitle" style="margin-top:16px">The record shoe</h3>
+        <canvas id="cDpsRec" height="220"></canvas>
+        <p class="note">Dragon true count before each hand of the shoe with the most Dragon 7s. Red dots are its Dragon 7s; the dashed line is the bet threshold.
+          A Dragon 7 usually uses up 4s to 7s, which pulls the count down right after it; the record shoe can still come at any count.</p></div>
     </div>
   </div>
 </section>
@@ -681,6 +692,32 @@ function countFrequency(shoes, threshold = 4) {
     distribution: CF_LABELS.map((label, k) => ({ label, shoes: dist[k], pct: 100 * dist[k] / shoes.length })),
     byStage: ["First third", "Middle third", "Last third"].map((s, k) => ({ stage: s, pct: qualifying ? 100 * stage[k] / qualifying : 0 })),
     perShoe,
+  };
+}
+
+// Dragon 7s per shoe (port of dragons_per_shoe in baccarat.R): most in one shoe, average,
+// median, shares, distribution vs independent hands (Poisson, same average), Panda 8, record shoe.
+function dragonsPerShoe(shoes, threshold = 4) {
+  const d7 = shoes.map(s => s.filter(h => h.d7).length), p8 = shoes.map(s => s.filter(h => h.p8).length);
+  const n = shoes.length, total = d7.reduce((a, b) => a + b, 0), lambda = total / n;
+  const maxD = d7.reduce((a, b) => Math.max(a, b), 0), maxP = p8.reduce((a, b) => Math.max(a, b), 0);
+  const recordIdx = d7.indexOf(maxD), sorted = d7.slice().sort((a, b) => a - b);
+  const median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  let hot = 0, dHot = 0, hands = 0;
+  for (const s of shoes) for (const h of s) { hands++; if (h.tc >= threshold) { hot++; if (h.d7) dHot++; } }
+  const top = Math.max(maxD, maxP), dc = new Array(top + 1).fill(0), pc = new Array(top + 1).fill(0);
+  d7.forEach(k => dc[k]++); p8.forEach(k => pc[k]++);
+  let pois = Math.exp(-lambda);
+  const distribution = dc.map((c, k) => { if (k > 0) pois *= lambda / k;
+    return { dragons: k, shoes: c, pctShoes: 100 * c / n, independentPct: 100 * pois, pandaShoes: pc[k], pandaPct: 100 * pc[k] / n }; });
+  return {
+    shoes: n, maxDragons: maxD, recordShoes: d7.filter(x => x === maxD).length, recordShoe: recordIdx + 1,
+    avgDragons: lambda, medianDragons: median,
+    pctZero: 100 * d7.filter(x => x === 0).length / n, pct5plus: 100 * d7.filter(x => x >= 5).length / n,
+    avgPanda: p8.reduce((a, b) => a + b, 0) / n, maxPanda: maxP, threshold,
+    avgDragonsAtThreshold: dHot / n, pctDragonsAtThreshold: total ? 100 * dHot / total : 0, pctHandsAtThreshold: 100 * hot / hands,
+    distribution,
+    record: shoes[recordIdx].map((h, i) => ({ hand: i + 1, p: h.p, b: h.b, w: h.w, d7: h.d7, tc: h.tc, rc: h.rc })),
   };
 }
 
@@ -1068,6 +1105,54 @@ function renderSim() {
   drawBars($("cStreak"), [...Array(K - 1).keys()].map(i => String(i + 1)).concat(K + "+"), obs.map(x => 100 * x / s.length),
     { dots: theo.map(x => 100 * x), color: () => tok("--player"), fmtY: v => v + "%" });
   renderCountFrequency(shoes, simCache.thr);
+  renderDragonsPerShoe(shoes, simCache.thr);
+}
+// Dragon 7s per shoe: tiles, distribution vs independent hands, the record shoe's count
+function renderDragonsPerShoe(shoes, thr) {
+  const d = dragonsPerShoe(shoes, thr);
+  $("dpsTiles").innerHTML = [["Most in one shoe", fmt(d.maxDragons, 0), `shoes with that many: ${fmt(d.recordShoes, 0)}`],
+    ["Average per shoe", fmt(d.avgDragons, 2), `median ${fmt(d.medianDragons, d.medianDragons % 1 ? 1 : 0)}`],
+    ["Shoes with none", fmt(d.pctZero, 1) + "%", ""], ["Shoes with 5 or more", fmt(d.pct5plus, 1) + "%", ""],
+    ["Panda 8 per shoe", fmt(d.avgPanda, 2), `most in one shoe: ${fmt(d.maxPanda, 0)}`],
+    [`Dragons at TC ≥ +${thr}`, fmt(d.pctDragonsAtThreshold, 1) + "%", `of all Dragons, on ${fmt(d.pctHandsAtThreshold, 1)}% of hands`]]
+    .map(([k, v, s]) => `<div class="tile"><div class="k">${k}</div><div class="v" style="font-size:1.1rem">${v}</div>${s ? `<div class="k" style="text-transform:none;letter-spacing:0">${s}</div>` : ""}</div>`).join("");
+  const rows = d.distribution.filter(r => r.dragons <= d.maxDragons);
+  drawBars($("cDps"), rows.map(r => String(r.dragons)), rows.map(r => r.pctShoes), {
+    dots: rows.map(r => r.independentPct), fmtY: v => v + "%",
+    color: v => v === rows[rows.length - 1].pctShoes ? tok("--banker") : tok("--player") });
+  labelBars($("cDps"), rows.map(r => r.shoes), rows.map(r => Math.max(r.pctShoes, r.independentPct)));
+  const pct = v => v > 0 && v < 0.1 ? fmt(v, 3) : fmt(v, 2);
+  $("dpsDist").innerHTML = `<tr><th class="r">Dragons</th><th class="r">Shoes</th><th class="r">%</th><th class="r">Indep. %</th><th class="r">Panda 8s</th></tr>` +
+    d.distribution.map(r => `<tr><td class="r">${r.dragons}</td><td class="r">${fmt(r.shoes, 0)}</td><td class="r">${pct(r.pctShoes)}</td>
+      <td class="r">${pct(r.independentPct)}</td><td class="r">${fmt(r.pandaShoes, 0)}</td></tr>`).join("");
+  $("dpsRecTitle").textContent = `The record shoe (#${fmt(d.recordShoe, 0)}): ${d.maxDragons} Dragon 7${d.maxDragons === 1 ? "" : "s"} in ${d.record.length} hands`;
+  drawRecordShoe($("cDpsRec"), d.record, thr);
+}
+// Shoe counts above bars drawn by drawBars (same scale rules as drawBars)
+function labelBars(cv, counts, tops) {
+  const ctx = cv.getContext("2d"), w = cv.clientWidth, h = +cv.getAttribute("height"), m = { l: 48, r: 10, t: 12, b: 34 };
+  const hi = Math.max(0, ...tops), pad = hi * .06;   // drawBars' y range for non-negative values: 0 to hi + 6%
+  const Y = v => m.t + (h - m.t - m.b) * (1 - v / (hi + pad));
+  const bw = (w - m.l - m.r) / counts.length;
+  if (bw < 22) return;
+  ctx.fillStyle = tok("--muted"); ctx.font = "10px " + tok("--mono"); ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  counts.forEach((c, i) => ctx.fillText(fmt(c, 0), m.l + i * bw + bw / 2, Y(tops[i]) - 5));
+}
+function drawRecordShoe(cv, rec, thr) {
+  const { ctx, w, h } = setupCanvas(cv), m = { l: 48, r: 14, t: 12, b: 28 };
+  let lo = Math.min(0, ...rec.map(r => r.tc)) - 1, hi = Math.max(thr, ...rec.map(r => r.tc)) + 1;
+  const Y = axes(ctx, w, h, m, lo, hi, v => fmt(v, 0));
+  const X = i => m.l + (w - m.l - m.r) * (i - 1) / Math.max(1, rec.length - 1);
+  ctx.strokeStyle = tok("--muted"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.l, Y(0)); ctx.lineTo(w - m.r, Y(0)); ctx.stroke();
+  ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(m.l, Y(thr)); ctx.lineTo(w - m.r, Y(thr)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = tok("--player"); ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
+  rec.forEach((r, i) => i ? ctx.lineTo(X(r.hand), Y(r.tc)) : ctx.moveTo(X(r.hand), Y(r.tc))); ctx.stroke();
+  for (const r of rec.filter(r => r.d7)) {
+    ctx.fillStyle = tok("--banker"); ctx.strokeStyle = tok("--panel"); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(X(r.hand), Y(r.tc), 5, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle = tok("--muted"); ctx.font = "11px " + tok("--mono"); ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const t of niceTicks(1, rec.length, 6)) ctx.fillText(fmt(t, 0), X(t), h - m.b + 8);
 }
 // How often each shoe reaches the Dragon true count threshold
 function renderCountFrequency(shoes, thr) {
