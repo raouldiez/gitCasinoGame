@@ -86,6 +86,7 @@ house_edge(h, game = "ez")                # simulated vs exact house edge
 compare_strategies(h)                     # betting systems head to head
 dragon_by_count(h)                        # Dragon 7 EV by true count
 count_frequency_summary(h, threshold = 4) # how often each shoe reaches TC >= +4
+dragons_per_shoe(h)                       # most Dragon 7s in a shoe, average, record shoe
 shoe_summary(h)                           # per-shoe table like 2016 simulplay()
 plot_report(h, file = "report.png")
 ```
